@@ -124,7 +124,7 @@
       };
 
       // --- From services/geminiService.ts ---
-      const API_KEY = process.env.API_KEY;
+      const API_KEY = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
 
       if (!API_KEY) {
         // This won't be shown in production if API_KEY is set.
