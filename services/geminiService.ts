@@ -2,18 +2,18 @@
 import { GoogleGenAI } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
-let userApiKey: string | null = null;
 
-export const MISSING_API_KEY_ERROR = "Layanan AI tidak diinisialisasi. Pastikan kunci API Anda dikonfigurasi dengan benar atau berikan satu di aplikasi.";
-export const INVALID_API_KEY_ERROR = "Kunci API yang Anda berikan tidak valid atau tidak memiliki izin yang benar. Silakan periksa kunci Anda.";
+export const MISSING_API_KEY_ERROR = "Kunci API Google tidak ditemukan di lingkungan. Harap atur variabel lingkungan API_KEY agar aplikasi dapat berfungsi.";
+export const INVALID_API_KEY_ERROR = "Kunci API yang disediakan di lingkungan Anda tidak valid atau telah kedaluwarsa. Silakan periksa konfigurasi API_KEY Anda.";
 
 function initializeAIClient(): boolean {
-  // Prioritas: 1. Klien yang sudah diinisialisasi, 2. Kunci yang disediakan pengguna, 3. Variabel lingkungan
+  // If already initialized, no need to do it again.
   if (ai) {
     return true;
   }
   
-  const key = userApiKey || (typeof process !== 'undefined' && process.env ? process.env.API_KEY : '');
+  // Get API key exclusively from environment variables.
+  const key = typeof process !== 'undefined' && process.env ? process.env.API_KEY : '';
 
   if (key && key.trim() !== '') {
     try {
@@ -26,12 +26,8 @@ function initializeAIClient(): boolean {
     }
   }
   
+  // If no key, initialization fails.
   return false;
-}
-
-export function setUserApiKey(apiKey: string) {
-  userApiKey = apiKey;
-  ai = null; // Paksa inisialisasi ulang pada panggilan berikutnya
 }
 
 export async function processImageWithAI(base64Image: string, mimeType: string, prompt: string): Promise<string> {
@@ -39,7 +35,7 @@ export async function processImageWithAI(base64Image: string, mimeType: string, 
     throw new Error(MISSING_API_KEY_ERROR);
   }
 
-  // Variabel 'ai' dijamin non-null di sini jika initializeAIClient mengembalikan true.
+  // 'ai' is guaranteed to be non-null here if initializeAIClient returns true.
   const client = ai!; 
 
   try {
@@ -64,7 +60,7 @@ export async function processImageWithAI(base64Image: string, mimeType: string, 
     console.error("Error saat memanggil layanan AI:", error);
 
     if (error instanceof Error && (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('permission denied'))) {
-        ai = null; // Atur ulang klien jika kunci API tidak valid
+        ai = null; // Reset client if API key is invalid
         throw new Error(INVALID_API_KEY_ERROR);
     }
 

@@ -5,7 +5,6 @@ export enum AppState {
   PROCESSING,
   SUCCESS,
   ERROR,
-  API_KEY_NEEDED,
 }
 
 export enum Task {
