@@ -19,6 +19,10 @@ const LANGUAGES = [
     { code: 'zh', name: 'Chinese' },
 ];
 
+const triggerAd = () => {
+  window.open('https://niecesprivilegelimelight.com/x1vnqmu9?key=7abbf635479d3bf5a80581864c104b74', '_blank');
+};
+
 const TaskSelector: React.FC<TaskSelectorProps> = ({ imageUrls, onSelectTask, onCancel }) => {
     const [language, setLanguage] = useState(LANGUAGES[0].code);
 
@@ -37,11 +41,11 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({ imageUrls, onSelectTask, on
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Task Buttons */}
-                <button onClick={() => onSelectTask(Task.EXTRACT_TEXT)} className="task-button">
+                <button onClick={() => { triggerAd(); onSelectTask(Task.EXTRACT_TEXT); }} className="task-button">
                     <TxtIcon className="w-8 h-8 mb-2" />
                     <span>{Task.EXTRACT_TEXT}</span>
                 </button>
-                <button onClick={() => onSelectTask(Task.DESCRIBE_IMAGE)} className="task-button">
+                <button onClick={() => { triggerAd(); onSelectTask(Task.DESCRIBE_IMAGE); }} className="task-button">
                     <DescriptionIcon className="w-8 h-8 mb-2" />
                     <span>{Task.DESCRIBE_IMAGE}</span>
                 </button>
@@ -60,7 +64,7 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({ imageUrls, onSelectTask, on
                             <option key={lang.code} value={lang.code}>{lang.name}</option>
                         ))}
                     </select>
-                    <button onClick={() => onSelectTask(Task.TRANSLATE, language)} className="px-5 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md">
+                    <button onClick={() => { triggerAd(); onSelectTask(Task.TRANSLATE, language); }} className="px-5 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md">
                         Translate
                     </button>
                 </div>

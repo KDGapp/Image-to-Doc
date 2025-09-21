@@ -2,13 +2,12 @@ import { GoogleGenAI } from "@google/genai";
 
 const API_KEY = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
 export async function processImageWithAI(base64Image: string, mimeType: string, prompt: string): Promise<string> {
+  if (!ai) {
+    throw new Error("AI Service is not initialized. Check API Key configuration.");
+  }
   try {
     const imagePart = {
       inlineData: {

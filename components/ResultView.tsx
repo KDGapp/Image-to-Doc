@@ -8,6 +8,10 @@ interface ResultItemProps {
   onTextChange: (text: string) => void;
 }
 
+const triggerAd = () => {
+  window.open('https://niecesprivilegelimelight.com/x1vnqmu9?key=7abbf635479d3bf5a80581864c104b74', '_blank');
+};
+
 const ResultItem: React.FC<ResultItemProps> = ({ result, onTextChange }) => {
   return (
     <div className="bg-white/50 backdrop-blur-md border border-white/30 p-4 rounded-xl flex flex-col md:flex-row gap-4 shadow-md">
@@ -23,13 +27,13 @@ const ResultItem: React.FC<ResultItemProps> = ({ result, onTextChange }) => {
         />
         <div className="mt-3 flex items-center gap-2">
             <span className="font-semibold text-sm text-slate-600">Download:</span>
-            <button onClick={() => downloadTxt(result.text)} className="download-button border-green-500 text-green-600 hover:bg-green-500 hover:text-white">
+            <button onClick={() => { triggerAd(); downloadTxt(result.text); }} className="download-button border-green-500 text-green-600 hover:bg-green-500 hover:text-white">
                 <TxtIcon className="w-4 h-4" /> .TXT
             </button>
-            <button onClick={() => downloadDoc(result.text)} className="download-button border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white">
+            <button onClick={() => { triggerAd(); downloadDoc(result.text); }} className="download-button border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white">
                 <DocIcon className="w-4 h-4" /> .DOC
             </button>
-            <button onClick={() => downloadPdf(result.text)} className="download-button border-red-500 text-red-600 hover:bg-red-500 hover:text-white">
+            <button onClick={() => { triggerAd(); downloadPdf(result.text); }} className="download-button border-red-500 text-red-600 hover:bg-red-500 hover:text-white">
                 <PdfIcon className="w-4 h-4" /> .PDF
             </button>
         </div>

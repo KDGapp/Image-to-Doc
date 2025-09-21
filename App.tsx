@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AppState, Task, ProcessedResult } from './types';
 import ImageUploader from './components/ImageUploader';
 import ResultView from './components/ResultView';
@@ -8,13 +8,58 @@ import { processImageWithAI } from './services/geminiService';
 import { fileToBase64 } from './utils/fileUtils';
 import { LogoIcon } from './components/Icons';
 
+const AdComponent: React.FC = () => {
+  const adRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (adRef.current && adRef.current.children.length === 0) {
+      const container = document.createElement('div');
+      container.id = 'container-10f9d35bcba536c63afb32dc4a986c0d';
+
+      const script = document.createElement('script');
+      script.async = true;
+      script.setAttribute('data-cfasync', 'false');
+      script.src = '//niecesprivilegelimelight.com/10f9d35bcba536c63afb32dc4a986c0d/invoke.js';
+      
+      adRef.current.appendChild(container);
+      adRef.current.appendChild(script);
+    }
+  }, []);
+
+  return (
+    <div className="my-6 w-full max-w-5xl mx-auto flex justify-center items-center" ref={adRef} style={{minHeight: '90px'}}>
+      {/* Advertisement loads here */}
+    </div>
+  );
+};
+
 const App: React.FC = () => {
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+        
+  useEffect(() => {
+    if (typeof process === 'undefined' || !process.env.API_KEY) {
+        setApiKeyError("API_KEY environment variable not set. This application is not configured correctly and cannot function.");
+    }
+  }, []);
+
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [results, setResults] = useState<ProcessedResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
+
+  if (apiKeyError) {
+    return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center p-4">
+            <div className="text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl max-w-2xl">
+                <h2 className="text-2xl font-semibold mb-4 text-red-600">Configuration Error</h2>
+                <p className="text-slate-700">{apiKeyError}</p>
+                <p className="text-slate-500 mt-4 text-sm">Please check your deployment settings.</p>
+            </div>
+        </div>
+    );
+  }
 
   const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
     if (imageFiles.length === 0) return;
@@ -165,6 +210,8 @@ const App: React.FC = () => {
         </p>
       </header>
       
+      <AdComponent />
+
       {appState === AppState.IDLE && (
         <section className="w-full max-w-5xl mx-auto mb-10 px-4">
           <div className="bg-white/40 backdrop-blur-lg border border-white/20 rounded-2xl p-6 sm:p-8 shadow-lg">
