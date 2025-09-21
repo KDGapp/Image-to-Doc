@@ -1,12 +1,15 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 const API_KEY = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
 
-const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
+// Initialize the AI client only if the API key is a valid, non-empty string.
+// An empty string can cause initialization errors.
+const ai = (API_KEY && API_KEY.trim() !== '') ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
 export async function processImageWithAI(base64Image: string, mimeType: string, prompt: string): Promise<string> {
   if (!ai) {
-    throw new Error("AI Service is not initialized. Check API Key configuration.");
+    throw new Error("AI Service is not initialized. Please ensure the API_KEY is configured correctly in your environment.");
   }
   try {
     const imagePart = {

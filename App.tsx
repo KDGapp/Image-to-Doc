@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AppState, Task, ProcessedResult } from './types';
 import ImageUploader from './components/ImageUploader';
@@ -36,15 +37,16 @@ const AdComponent: React.FC = () => {
 const App: React.FC = () => {
   // Check for API key immediately in a way that is safe for browser environments
   // where `process` might not be defined. This prevents a "white screen" crash.
+  // Also checks if the key is an empty string.
   const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
 
-  if (!apiKey) {
+  if (!apiKey || apiKey.trim() === '') {
     return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center p-4">
             <div className="text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl max-w-2xl">
                 <h2 className="text-2xl font-semibold mb-4 text-red-600">Configuration Error</h2>
-                <p className="text-slate-700">API_KEY environment variable not set. This application is not configured correctly and cannot function.</p>
-                <p className="text-slate-500 mt-4 text-sm">Please check your deployment settings.</p>
+                <p className="text-slate-700">The <code>API_KEY</code> environment variable is not set or is empty. This application requires a valid Google AI API key to function.</p>
+                <p className="text-slate-500 mt-4 text-sm">Please check your deployment settings and ensure the API key is provided.</p>
             </div>
         </div>
     );
