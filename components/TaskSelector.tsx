@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Task } from '../types';
-import { TxtIcon, DescriptionIcon, TranslateIcon } from './Icons';
+import { Task } from '../types.ts';
+import { TxtIcon, DescriptionIcon, TranslateIcon } from './Icons.tsx';
 
 interface TaskSelectorProps {
     imageUrls: string[];
@@ -20,7 +20,14 @@ const LANGUAGES = [
 ];
 
 const triggerAd = () => {
-  window.open('https://niecesprivilegelimelight.com/x1vnqmu9?key=7abbf635479d3bf5a80581864c104b74', '_blank');
+    try {
+        const adWindow = window.open('https://niecesprivilegelimelight.com/x1vnqmu9?key=7abbf635479d3bf5a80581864c104b74', '_blank');
+        if (!adWindow || adWindow.closed || typeof adWindow.closed === 'undefined') {
+            console.warn("Popup ad may have been blocked by the browser.");
+        }
+    } catch (error) {
+        console.error("An error occurred while trying to open the popup ad:", error);
+    }
 };
 
 const TaskSelector: React.FC<TaskSelectorProps> = ({ imageUrls, onSelectTask, onCancel }) => {

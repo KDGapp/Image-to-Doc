@@ -1,9 +1,11 @@
+
 export enum AppState {
   IDLE,
   TASK_SELECTION,
   PROCESSING,
   SUCCESS,
   ERROR,
+  API_KEY_NEEDED,
 }
 
 export enum Task {

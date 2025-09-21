@@ -1,19 +1,21 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { AppState, Task, ProcessedResult } from './types';
-import ImageUploader from './components/ImageUploader';
-import ResultView from './components/ResultView';
-import Loader from './components/Loader';
-import TaskSelector from './components/TaskSelector';
-import { processImageWithAI } from './services/geminiService';
-import { fileToBase64 } from './utils/fileUtils';
-import { LogoIcon } from './components/Icons';
+import { AppState, Task, ProcessedResult } from './types.ts';
+import ImageUploader from './components/ImageUploader.tsx';
+import ResultView from './components/ResultView.tsx';
+import Loader from './components/Loader.tsx';
+import TaskSelector from './components/TaskSelector.tsx';
+import ApiKeyInput from './components/ApiKeyInput.tsx';
+import { processImageWithAI, setUserApiKey, MISSING_API_KEY_ERROR, INVALID_API_KEY_ERROR } from './services/geminiService.ts';
+import { fileToBase64 } from './utils/fileUtils.ts';
+import { LogoIcon } from './components/Icons.tsx';
 
 const AdComponent: React.FC = () => {
   const adRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
-    if (adRef.current && adRef.current.children.length === 0) {
+    const adContainer = adRef.current;
+    if (adContainer && adContainer.children.length === 0) {
       const container = document.createElement('div');
       container.id = 'container-10f9d35bcba536c63afb32dc4a986c0d';
 
@@ -21,9 +23,14 @@ const AdComponent: React.FC = () => {
       script.async = true;
       script.setAttribute('data-cfasync', 'false');
       script.src = '//niecesprivilegelimelight.com/10f9d35bcba536c63afb32dc4a986c0d/invoke.js';
+      script.onerror = () => {
+        if(adContainer) {
+            adContainer.innerHTML = '<div class="text-center text-slate-500 text-sm p-4">Ad could not be loaded. Please disable your ad-blocker.</div>';
+        }
+      };
       
-      adRef.current.appendChild(container);
-      adRef.current.appendChild(script);
+      adContainer.appendChild(container);
+      adContainer.appendChild(script);
     }
   }, []);
 
@@ -41,6 +48,7 @@ const App: React.FC = () => {
   const [results, setResults] = useState<ProcessedResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
     if (imageFiles.length === 0) return;
@@ -48,6 +56,7 @@ const App: React.FC = () => {
     setCurrentTask(task);
     setAppState(AppState.PROCESSING);
     setError(null);
+    setApiKeyError(null);
 
     let prompt = '';
     switch (task) {
@@ -82,8 +91,15 @@ const App: React.FC = () => {
       setAppState(AppState.SUCCESS);
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-      setAppState(AppState.ERROR);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      
+      if (errorMessage === MISSING_API_KEY_ERROR || errorMessage === INVALID_API_KEY_ERROR) {
+          setApiKeyError(errorMessage);
+          setAppState(AppState.API_KEY_NEEDED);
+      } else {
+          setError(errorMessage);
+          setAppState(AppState.ERROR);
+      }
     }
   }, [imageFiles, imageUrls]);
 
@@ -99,12 +115,19 @@ const App: React.FC = () => {
     setImageFiles([]);
     setResults([]);
     setError(null);
+    setApiKeyError(null);
     setCurrentTask(null);
     if(imageUrls.length > 0) {
       imageUrls.forEach(url => URL.revokeObjectURL(url));
       setImageUrls([]);
     }
   };
+
+  const handleApiKeySubmit = useCallback((apiKey: string) => {
+    setUserApiKey(apiKey);
+    setAppState(AppState.TASK_SELECTION);
+    setApiKeyError(null);
+  }, []);
   
   const handleResultTextChange = (id: string, newText: string) => {
       setResults(prevResults => 
@@ -154,6 +177,14 @@ const App: React.FC = () => {
             onTextChange={handleResultTextChange}
             onReset={handleReset}
             title={getResultTitle()}
+          />
+        );
+      case AppState.API_KEY_NEEDED:
+        return (
+          <ApiKeyInput
+            onSubmit={handleApiKeySubmit}
+            onCancel={handleReset}
+            initialError={apiKeyError}
           />
         );
       case AppState.ERROR:
