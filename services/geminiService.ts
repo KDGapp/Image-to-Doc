@@ -1,18 +1,35 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
 let currentApiKey: string | null = null;
 
-// Immediately try to initialize from environment variable
-const keyFromEnv = typeof process !== 'undefined' && process.env ? process.env.API_KEY : '';
+// Extend window interface to include our injected key
+declare global {
+    interface Window {
+        injectedApiKey?: string;
+    }
+}
+
+// --- Initialization Priority ---
+let keyFromEnv = '';
+// 1. Check for a key injected by a build process (e.g., via GitHub Actions).
+//    It must not be the placeholder value.
+if (typeof window.injectedApiKey === 'string' && window.injectedApiKey !== '' && window.injectedApiKey !== '__API_KEY__') {
+    keyFromEnv = window.injectedApiKey;
+} 
+// 2. Fallback for standard build tools that replace process.env.
+else if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    keyFromEnv = process.env.API_KEY;
+}
+
+// 3. If a key was found, try to initialize the AI client.
 if (keyFromEnv && keyFromEnv.trim() !== '') {
     currentApiKey = keyFromEnv;
     try {
         ai = new GoogleGenAI({ apiKey: currentApiKey });
     } catch (e) {
-        console.error("Failed to initialize with ENV API key:", e);
-        ai = null;
+        console.error("Failed to initialize with injected/ENV API key:", e);
+        ai = null; // Clear client on failure
         currentApiKey = null;
     }
 }
