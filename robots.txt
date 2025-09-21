@@ -1,2 +1,2 @@
 User-agent: *
-Allow: /beritahu saya cara memasang evironment di github
+Allow: /

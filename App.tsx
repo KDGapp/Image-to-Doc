@@ -34,13 +34,19 @@ const AdComponent: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-        
-  useEffect(() => {
-    if (typeof process === 'undefined' || !process.env.API_KEY) {
-        setApiKeyError("API_KEY environment variable not set. This application is not configured correctly and cannot function.");
-    }
-  }, []);
+  // Check for API key immediately. If not present, render an error message and stop.
+  // This is more robust than a useEffect and prevents the "white flash" crash.
+  if (!process.env.API_KEY) {
+    return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center p-4">
+            <div className="text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl max-w-2xl">
+                <h2 className="text-2xl font-semibold mb-4 text-red-600">Configuration Error</h2>
+                <p className="text-slate-700">API_KEY environment variable not set. This application is not configured correctly and cannot function.</p>
+                <p className="text-slate-500 mt-4 text-sm">Please check your deployment settings.</p>
+            </div>
+        </div>
+    );
+  }
 
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -48,18 +54,6 @@ const App: React.FC = () => {
   const [results, setResults] = useState<ProcessedResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
-
-  if (apiKeyError) {
-    return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center p-4">
-            <div className="text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl max-w-2xl">
-                <h2 className="text-2xl font-semibold mb-4 text-red-600">Configuration Error</h2>
-                <p className="text-slate-700">{apiKeyError}</p>
-                <p className="text-slate-500 mt-4 text-sm">Please check your deployment settings.</p>
-            </div>
-        </div>
-    );
-  }
 
   const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
     if (imageFiles.length === 0) return;
