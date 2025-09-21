@@ -125,19 +125,12 @@
 
       // --- From services/geminiService.ts ---
       const API_KEY = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-
-      if (!API_KEY) {
-        // This won't be shown in production if API_KEY is set.
-        const errorDiv = document.createElement('div');
-        errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;padding:1rem;background-color:red;color:white;text-align:center;font-family:sans-serif;z-index:9999;';
-        errorDiv.textContent = 'API_KEY environment variable not set. The application will not work.';
-        document.body.prepend(errorDiv);
-        throw new Error("API_KEY environment variable not set");
-      }
-
-      const ai = new GoogleGenAI({ apiKey: API_KEY });
+      const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
       async function processImageWithAI(base64Image, mimeType, prompt) {
+        if (!ai) {
+          throw new Error("AI Service is not initialized. Check API Key configuration.");
+        }
         try {
           const imagePart = {
             inlineData: {
@@ -505,12 +498,32 @@
 
       // --- From App.tsx ---
       const App = () => {
+        const [apiKeyError, setApiKeyError] = useState(null);
+        
+        useEffect(() => {
+          if (typeof process === 'undefined' || !process.env.API_KEY) {
+              setApiKeyError("API_KEY environment variable not set. This application is not configured correctly and cannot function.");
+          }
+        }, []);
+
         const [appState, setAppState] = useState(AppState.IDLE);
         const [imageFiles, setImageFiles] = useState([]);
         const [imageUrls, setImageUrls] = useState([]);
         const [results, setResults] = useState([]);
         const [error, setError] = useState(null);
         const [currentTask, setCurrentTask] = useState(null);
+        
+        if (apiKeyError) {
+          return (
+              <div className="min-h-screen w-full flex flex-col items-center justify-center p-4">
+                  <div className="text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl max-w-2xl">
+                      <h2 className="text-2xl font-semibold mb-4 text-red-600">Configuration Error</h2>
+                      <p className="text-slate-700">{apiKeyError}</p>
+                      <p className="text-slate-500 mt-4 text-sm">Please check your deployment settings.</p>
+                  </div>
+              </div>
+          );
+        }
 
         const handleTaskSelect = useCallback(async (task, language) => {
           if (imageFiles.length === 0) return;
