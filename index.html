@@ -43,8 +43,15 @@
   <body class="bg-gradient-to-br from-purple-100 via-blue-100 to-cyan-100 text-slate-800">
     <div id="root"></div>
     <script>
-      // Polyfill process.env for browser environments to prevent crashing.
-      // The Gemini service will then handle the missing API key gracefully.
+      // This placeholder is meant to be replaced by a CI/CD process (like GitHub Actions).
+      // The script will inject the API key from a secure secret into this global variable.
+      // The application will then pick it up automatically on load.
+      // Example replacement command: sed -i "s|__API_KEY__|${{ secrets.API_KEY }}|g" index.html
+      window.injectedApiKey = '__API_KEY__';
+    </script>
+    <script>
+      // Polyfill process.env for browser environments.
+      // This is a fallback for build tools that use process.env.
       if (typeof process === 'undefined') {
         window.process = { env: { API_KEY: '' } };
       }
@@ -61,6 +68,7 @@ const { useState, useCallback, useEffect, useRef } = React;
 
 // === START: types.ts ===
 enum AppState {
+  API_KEY_NEEDED,
   IDLE,
   TASK_SELECTION,
   PROCESSING,
@@ -263,70 +271,104 @@ const downloadPdf = (text: string) => {
 
 // === START: services/geminiService.ts ===
 let ai: GoogleGenAI | null = null;
+let currentApiKey: string | null = null;
 
-const MISSING_API_KEY_ERROR = "Kunci API Google tidak ditemukan di lingkungan. Harap atur variabel lingkungan API_KEY agar aplikasi dapat berfungsi.";
-const INVALID_API_KEY_ERROR = "Kunci API yang disediakan di lingkungan Anda tidak valid atau telah kedaluwarsa. Silakan periksa konfigurasi API_KEY Anda.";
-
-function initializeAIClient(): boolean {
-  // If already initialized, no need to do it again.
-  if (ai) {
-    return true;
-  }
-  
-  // Get API key exclusively from environment variables.
-  const key = typeof process !== 'undefined' && process.env ? process.env.API_KEY : '';
-
-  if (key && key.trim() !== '') {
-    try {
-      ai = new GoogleGenAI({ apiKey: key });
-      return true;
-    } catch (error) {
-      console.error("Gagal menginisialisasi GoogleGenAI:", error);
-      ai = null; 
-      return false;
+// Extend window interface to include our injected key
+declare global {
+    interface Window {
+        injectedApiKey?: string;
     }
-  }
-  
-  // If no key, initialization fails.
-  return false;
+}
+
+// --- Initialization Priority ---
+let keyFromEnv = '';
+// 1. Check for a key injected by a build process (e.g., via GitHub Actions).
+//    It must not be the placeholder value.
+if (typeof window.injectedApiKey === 'string' && window.injectedApiKey !== '' && window.injectedApiKey !== '__API_KEY__') {
+    keyFromEnv = window.injectedApiKey;
+} 
+// 2. Fallback for standard build tools that replace process.env.
+else if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    keyFromEnv = process.env.API_KEY;
+}
+
+// 3. If a key was found, try to initialize the AI client.
+if (keyFromEnv && keyFromEnv.trim() !== '') {
+    currentApiKey = keyFromEnv;
+    try {
+        ai = new GoogleGenAI({ apiKey: currentApiKey });
+    } catch (e) {
+        console.error("Failed to initialize with injected/ENV API key:", e);
+        ai = null; // Clear client on failure
+        currentApiKey = null;
+    }
+}
+
+const MISSING_API_KEY_ERROR = "Kunci API Google Gemini diperlukan. Harap berikan kunci API untuk melanjutkan.";
+const INVALID_API_KEY_ERROR = "Kunci API yang Anda berikan tidak valid. Silakan periksa kunci Anda dan coba lagi.";
+
+/**
+ * Sets the API key for the Gemini service.
+ * @param key The Google Gemini API key.
+ * @returns true if the key is valid and the client is initialized, false otherwise.
+ */
+function setApiKey(key: string): boolean {
+    if (key && key.trim() !== '') {
+        try {
+            // Test the key by creating a new client instance.
+            const testAi = new GoogleGenAI({ apiKey: key });
+            ai = testAi; // If it doesn't throw, assign it as the active client.
+            currentApiKey = key;
+            return true;
+        } catch (error) {
+            console.error("Failed to initialize GoogleGenAI with provided key:", error);
+            ai = null;
+            currentApiKey = null;
+            return false;
+        }
+    }
+    return false;
 }
 
 async function processImageWithAI(base64Image: string, mimeType: string, prompt: string): Promise<string> {
-  if (!initializeAIClient()) {
-    throw new Error(MISSING_API_KEY_ERROR);
-  }
-
-  // 'ai' is guaranteed to be non-null here if initializeAIClient returns true.
-  const client = ai!; 
-
-  try {
-    const imagePart = {
-      inlineData: {
-        mimeType: mimeType,
-        data: base64Image,
-      },
-    };
-
-    const textPart = {
-      text: prompt,
-    };
-
-    const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { parts: [imagePart, textPart] }
-    });
-    
-    return response.text;
-  } catch (error) {
-    console.error("Error saat memanggil layanan AI:", error);
-
-    if (error instanceof Error && (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('permission denied'))) {
-        ai = null; // Reset client if API key is invalid
-        throw new Error(INVALID_API_KEY_ERROR);
+    if (!ai) {
+        // If ENV key was not present or failed, this will be null.
+        // App should transition to asking for the key.
+        throw new Error(MISSING_API_KEY_ERROR);
     }
 
-    throw new Error("Gagal berkomunikasi dengan layanan AI. Silakan coba lagi nanti.");
-  }
+    try {
+        const imagePart = {
+            inlineData: {
+                mimeType: mimeType,
+                data: base64Image,
+            },
+        };
+
+        const textPart = {
+            text: prompt,
+        };
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [imagePart, textPart] }
+        });
+        
+        return response.text;
+    } catch (error) {
+        console.error("Error calling AI service:", error);
+
+        // Check if the error is likely due to an invalid API key
+        if (error instanceof Error && (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('permission denied'))) {
+            // The key is bad. Reset the client so the app asks for a new one.
+            ai = null;
+            currentApiKey = null;
+            throw new Error(INVALID_API_KEY_ERROR);
+        }
+
+        // For other errors, throw a generic message.
+        throw new Error("Gagal berkomunikasi dengan layanan AI. Silakan coba lagi nanti.");
+    }
 }
 // === END: services/geminiService.ts ===
 
@@ -618,6 +660,86 @@ const TaskSelector: React.FC<TaskSelectorProps> = ({ imageUrls, onSelectTask, on
 }
 // === END: components/TaskSelector.tsx ===
 
+// === START: components/ApiKeyInput.tsx ===
+interface ApiKeyInputProps {
+    onSubmit: (apiKey: string) => void;
+    onCancel: () => void;
+    initialError?: string | null;
+}
+
+const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onSubmit, onCancel, initialError }) => {
+    const [apiKey, setApiKey] = useState('');
+    const [error, setError] = useState<string | null>(initialError || null);
+
+    useEffect(() => {
+        setError(initialError);
+    }, [initialError]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!apiKey.trim()) {
+            setError("Kunci API tidak boleh kosong.");
+            return;
+        }
+        setError(null);
+        onSubmit(apiKey);
+    };
+
+    return (
+        <div className="text-center bg-white/40 backdrop-blur-lg border border-white/20 p-8 rounded-2xl shadow-lg w-full max-w-md animate-fade-in">
+            <h2 className="text-2xl font-semibold mb-4 text-sky-700">Diperlukan Kunci API</h2>
+            <p className="text-slate-600 mb-6">
+                Kunci API diperlukan untuk menggunakan fitur AI. Silakan masukkan kunci API Google Gemini Anda di bawah ini.
+                Jika Anda tidak memilikinya, Anda bisa mendapatkannya dari Google AI Studio.
+            </p>
+            {error && (
+                <div className="bg-red-500/20 text-red-700 p-3 rounded-lg mb-4 text-sm">
+                    {error}
+                </div>
+            )}
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => {
+                        setApiKey(e.target.value);
+                        if(error) setError(null);
+                    }}
+                    placeholder="Masukkan Kunci API Gemini Anda"
+                    className="w-full bg-white/60 border-2 border-slate-300 rounded-lg p-3 text-slate-800 focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors"
+                    aria-label="Input Kunci API Gemini"
+                />
+                <div className="flex justify-center gap-4">
+                     <button
+                        type="button"
+                        onClick={onCancel}
+                        className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md"
+                    >
+                        Simpan & Lanjutkan
+                    </button>
+                </div>
+            </form>
+            <style>{`
+                @keyframes fade-in {
+                    from { opacity: 0; transform: scale(0.95); }
+                    to { opacity: 1; transform: scale(1); }
+                }
+                .animate-fade-in {
+                    animation: fade-in 0.3s ease-out forwards;
+                }
+            `}</style>
+        </div>
+    );
+};
+// === END: components/ApiKeyInput.tsx ===
+
+
 // === START: App.tsx ===
 const AdComponent: React.FC = () => {
   const adRef = useRef<HTMLDivElement>(null);
@@ -657,13 +779,17 @@ const App: React.FC = () => {
   const [results, setResults] = useState<ProcessedResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
-  const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
+  const pendingTask = useRef<{ task: Task; language?: string } | null>(null);
+
+  const executeTask = useCallback(async (task: Task, language?: string) => {
     if (imageFiles.length === 0) return;
 
     setCurrentTask(task);
     setAppState(AppState.PROCESSING);
     setError(null);
+    setApiKeyError(null);
 
     let prompt = '';
     switch (task) {
@@ -699,10 +825,43 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      setError(errorMessage);
-      setAppState(AppState.ERROR);
+      
+      if (errorMessage === MISSING_API_KEY_ERROR || errorMessage === INVALID_API_KEY_ERROR) {
+          setError(null);
+          setApiKeyError(errorMessage);
+          setAppState(AppState.API_KEY_NEEDED);
+      } else {
+          setError(errorMessage);
+          setAppState(AppState.ERROR);
+      }
     }
   }, [imageFiles, imageUrls]);
+
+
+  const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
+    pendingTask.current = { task, language };
+    await executeTask(task, language);
+  }, [executeTask]);
+
+
+  const handleApiKeySubmit = useCallback(async (key: string) => {
+    if (setApiKey(key)) {
+      setApiKeyError(null);
+      if (pendingTask.current) {
+        await executeTask(pendingTask.current.task, pendingTask.current.language);
+      } else {
+        setAppState(AppState.IDLE);
+      }
+    } else {
+      setApiKeyError(INVALID_API_KEY_ERROR);
+      setAppState(AppState.API_KEY_NEEDED);
+    }
+  }, [executeTask]);
+
+  const handleApiKeyCancel = () => {
+    setApiKeyError(null);
+    handleReset();
+  };
 
   const handleImageSelect = useCallback((files: File[]) => {
     const urls = files.map(file => URL.createObjectURL(file));
@@ -716,7 +875,9 @@ const App: React.FC = () => {
     setImageFiles([]);
     setResults([]);
     setError(null);
+    setApiKeyError(null);
     setCurrentTask(null);
+    pendingTask.current = null;
     if(imageUrls.length > 0) {
       imageUrls.forEach(url => URL.revokeObjectURL(url));
       setImageUrls([]);
@@ -747,6 +908,8 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (appState) {
+      case AppState.API_KEY_NEEDED:
+        return <ApiKeyInput onSubmit={handleApiKeySubmit} onCancel={handleApiKeyCancel} initialError={apiKeyError} />;
       case AppState.TASK_SELECTION:
         return (
             imageUrls.length > 0 && <TaskSelector imageUrls={imageUrls} onSelectTask={handleTaskSelect} onCancel={handleReset} />

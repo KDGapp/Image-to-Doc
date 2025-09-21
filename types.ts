@@ -1,5 +1,6 @@
 
 export enum AppState {
+  API_KEY_NEEDED,
   IDLE,
   TASK_SELECTION,
   PROCESSING,

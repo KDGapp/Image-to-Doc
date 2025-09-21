@@ -5,7 +5,8 @@ import ImageUploader from './components/ImageUploader.tsx';
 import ResultView from './components/ResultView.tsx';
 import Loader from './components/Loader.tsx';
 import TaskSelector from './components/TaskSelector.tsx';
-import { processImageWithAI } from './services/geminiService.ts';
+import ApiKeyInput from './components/ApiKeyInput.tsx';
+import { processImageWithAI, setApiKey, MISSING_API_KEY_ERROR, INVALID_API_KEY_ERROR } from './services/geminiService.ts';
 import { fileToBase64 } from './utils/fileUtils.ts';
 import { LogoIcon } from './components/Icons.tsx';
 
@@ -47,13 +48,17 @@ const App: React.FC = () => {
   const [results, setResults] = useState<ProcessedResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
-  const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
+  const pendingTask = useRef<{ task: Task; language?: string } | null>(null);
+
+  const executeTask = useCallback(async (task: Task, language?: string) => {
     if (imageFiles.length === 0) return;
 
     setCurrentTask(task);
     setAppState(AppState.PROCESSING);
     setError(null);
+    setApiKeyError(null);
 
     let prompt = '';
     switch (task) {
@@ -89,10 +94,43 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      setError(errorMessage);
-      setAppState(AppState.ERROR);
+      
+      if (errorMessage === MISSING_API_KEY_ERROR || errorMessage === INVALID_API_KEY_ERROR) {
+          setError(null);
+          setApiKeyError(errorMessage);
+          setAppState(AppState.API_KEY_NEEDED);
+      } else {
+          setError(errorMessage);
+          setAppState(AppState.ERROR);
+      }
     }
   }, [imageFiles, imageUrls]);
+
+
+  const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
+    pendingTask.current = { task, language };
+    await executeTask(task, language);
+  }, [executeTask]);
+
+
+  const handleApiKeySubmit = useCallback(async (key: string) => {
+    if (setApiKey(key)) {
+      setApiKeyError(null);
+      if (pendingTask.current) {
+        await executeTask(pendingTask.current.task, pendingTask.current.language);
+      } else {
+        setAppState(AppState.IDLE);
+      }
+    } else {
+      setApiKeyError(INVALID_API_KEY_ERROR);
+      setAppState(AppState.API_KEY_NEEDED);
+    }
+  }, [executeTask]);
+
+  const handleApiKeyCancel = () => {
+    setApiKeyError(null);
+    handleReset();
+  };
 
   const handleImageSelect = useCallback((files: File[]) => {
     const urls = files.map(file => URL.createObjectURL(file));
@@ -106,7 +144,9 @@ const App: React.FC = () => {
     setImageFiles([]);
     setResults([]);
     setError(null);
+    setApiKeyError(null);
     setCurrentTask(null);
+    pendingTask.current = null;
     if(imageUrls.length > 0) {
       imageUrls.forEach(url => URL.revokeObjectURL(url));
       setImageUrls([]);
@@ -137,6 +177,8 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (appState) {
+      case AppState.API_KEY_NEEDED:
+        return <ApiKeyInput onSubmit={handleApiKeySubmit} onCancel={handleApiKeyCancel} initialError={apiKeyError} />;
       case AppState.TASK_SELECTION:
         return (
             imageUrls.length > 0 && <TaskSelector imageUrls={imageUrls} onSelectTask={handleTaskSelect} onCancel={handleReset} />
