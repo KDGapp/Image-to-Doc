@@ -43,19 +43,968 @@
   <body class="bg-gradient-to-br from-purple-100 via-blue-100 to-cyan-100 text-slate-800">
     <div id="root"></div>
     <script>
-      // This placeholder is meant to be replaced by a CI/CD process (like GitHub Actions).
-      // The script will inject the API key from a secure secret into this global variable.
-      // The application will then pick it up automatically on load.
-      // Example replacement command: sed -i "s|__API_KEY__|${{ secrets.API_KEY }}|g" index.html
-      window.injectedApiKey = '__API_KEY__';
-    </script>
-    <script>
-      // Polyfill process.env for browser environments.
-      // This is a fallback for build tools that use process.env.
+      // Polyfill process.env for browser environments to prevent crashing.
+      // The Gemini service will then handle the missing API key gracefully.
       if (typeof process === 'undefined') {
         window.process = { env: { API_KEY: '' } };
       }
     </script>
-    <script type="text/babel" data-presets="react,typescript" data-type="module" src="./index.tsx"></script>
+    <script type="text/babel" data-presets="react,typescript" data-type="module">
+// BUNDLED APPLICATION CODE
+
+// Import dependencies from importmap
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { GoogleGenAI } from "@google/genai";
+
+const { useState, useCallback, useEffect, useRef } = React;
+
+// === START: types.ts ===
+enum AppState {
+  API_KEY_NEEDED,
+  IDLE,
+  TASK_SELECTION,
+  PROCESSING,
+  SUCCESS,
+  ERROR,
+}
+
+enum Task {
+  EXTRACT_TEXT = 'Extract Text',
+  DESCRIBE_IMAGE = 'Describe Image',
+  TRANSLATE = 'Translate Text in Image',
+}
+
+type ProcessedResult = {
+  id: string; // Menggunakan imageUrl sebagai ID unik
+  imageUrl: string;
+  text: string;
+};
+// === END: types.ts ===
+
+// === START: components/Icons.tsx ===
+type IconProps = {
+  className?: string;
+};
+
+const LogoIcon: React.FC<IconProps> = ({ className }) => (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      aria-labelledby="logoTitle"
+    >
+      <title id="logoTitle">Image to Doc Logo</title>
+      {/* Document Outline */}
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+      />
+      {/* Image part: sun & mountain */}
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8 10l2-2 2 2 2.5-2.5"
+      />
+      <circle cx="15.5" cy="8" r="1.5" />
+      {/* Separator line */}
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13h14" />
+      {/* Text part: lines */}
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8 15.5h8M8 18h5"
+      />
+    </svg>
+);
+
+const UploadIcon: React.FC<IconProps> = ({ className }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+    />
+  </svg>
+);
+
+const TxtIcon: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
+const DocIcon: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
+const PdfIcon: React.FC<IconProps> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+);
+
+const DescriptionIcon: React.FC<IconProps> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
+    </svg>
+);
+
+const TranslateIcon: React.FC<IconProps> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.06 7.16l-1.06-1.06-1.06 1.06M9 16.5V12m0 0a3 3 0 013 3m-3-3a3 3 0 00-3 3m-3.75 3h17.5a2.25 2.25 0 002.25-2.25v-13.5A2.25 2.25 0 0019.25 2H4.75A2.25 2.25 0 002.5 4.25v13.5A2.25 2.25 0 004.75 20z" />
+    </svg>
+);
+// === END: components/Icons.tsx ===
+
+// === START: components/Loader.tsx ===
+const Loader: React.FC = () => {
+  return (
+    <div className="flex justify-center items-center">
+      <svg
+        className="animate-spin h-12 w-12 text-sky-400"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <circle
+          className="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          strokeWidth="4"
+        ></circle>
+        <path
+          className="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+        ></path>
+      </svg>
+    </div>
+  );
+};
+// === END: components/Loader.tsx ===
+
+// === START: utils/fileUtils.ts ===
+// This makes TypeScript aware of the jsPDF global variable from the CDN
+declare global {
+  interface Window {
+    jspdf: any;
+  }
+}
+
+const fileToBase64 = (file: File): Promise<{ base64: string; mimeType: string }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      resolve({ base64, mimeType: file.type });
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
+const createDownloadLink = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+const downloadTxt = (text: string) => {
+  const blob = new Blob([text], { type: 'text/plain' });
+  createDownloadLink(blob, 'document.txt');
+};
+
+const downloadDoc = (text: string) => {
+  const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' "+
+        "xmlns:w='urn:schemas-microsoft-com:office:word' "+
+        "xmlns='http://www.w3.org/TR/REC-html40'>"+
+        "<head><meta charset='utf-8'><title>Export HTML to Word Document</title></head><body>";
+  const footer = "</body></html>";
+  const sourceHTML = header + text.replace(/\n/g, '<br/>') + footer;
+  const blob = new Blob([sourceHTML], { type: 'application/msword' });
+  createDownloadLink(blob, 'document.doc');
+};
+
+const downloadPdf = (text: string) => {
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const lines = doc.splitTextToSize(text, 180);
+        doc.text(lines, 10, 10);
+        doc.save('document.pdf');
+    } catch(e) {
+        alert('Failed to create PDF. Please ensure the jsPDF library is loaded correctly.');
+        console.error(e);
+    }
+};
+// === END: utils/fileUtils.ts ===
+
+// === START: services/geminiService.ts ===
+let ai: GoogleGenAI | null = null;
+let currentApiKey: string | null = null;
+
+// Immediately try to initialize from environment variable
+const keyFromEnv = typeof process !== 'undefined' && process.env ? process.env.API_KEY : '';
+if (keyFromEnv && keyFromEnv.trim() !== '') {
+    currentApiKey = keyFromEnv;
+    try {
+        ai = new GoogleGenAI({ apiKey: currentApiKey });
+    } catch (e) {
+        console.error("Failed to initialize with ENV API key:", e);
+        ai = null;
+        currentApiKey = null;
+    }
+}
+
+const MISSING_API_KEY_ERROR = "Kunci API Google Gemini diperlukan. Harap berikan kunci API untuk melanjutkan.";
+const INVALID_API_KEY_ERROR = "Kunci API yang Anda berikan tidak valid. Silakan periksa kunci Anda dan coba lagi.";
+
+/**
+ * Sets the API key for the Gemini service.
+ * @param key The Google Gemini API key.
+ * @returns true if the key is valid and the client is initialized, false otherwise.
+ */
+function setApiKey(key: string): boolean {
+    if (key && key.trim() !== '') {
+        try {
+            // Test the key by creating a new client instance.
+            const testAi = new GoogleGenAI({ apiKey: key });
+            ai = testAi; // If it doesn't throw, assign it as the active client.
+            currentApiKey = key;
+            return true;
+        } catch (error) {
+            console.error("Failed to initialize GoogleGenAI with provided key:", error);
+            ai = null;
+            currentApiKey = null;
+            return false;
+        }
+    }
+    return false;
+}
+
+async function processImageWithAI(base64Image: string, mimeType: string, prompt: string): Promise<string> {
+    if (!ai) {
+        // If ENV key was not present or failed, this will be null.
+        // App should transition to asking for the key.
+        throw new Error(MISSING_API_KEY_ERROR);
+    }
+
+    try {
+        const imagePart = {
+            inlineData: {
+                mimeType: mimeType,
+                data: base64Image,
+            },
+        };
+
+        const textPart = {
+            text: prompt,
+        };
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [imagePart, textPart] }
+        });
+        
+        return response.text;
+    } catch (error) {
+        console.error("Error calling AI service:", error);
+
+        // Check if the error is likely due to an invalid API key
+        if (error instanceof Error && (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('permission denied'))) {
+            // The key is bad. Reset the client so the app asks for a new one.
+            ai = null;
+            currentApiKey = null;
+            throw new Error(INVALID_API_KEY_ERROR);
+        }
+
+        // For other errors, throw a generic message.
+        throw new Error("Gagal berkomunikasi dengan layanan AI. Silakan coba lagi nanti.");
+    }
+}
+// === END: services/geminiService.ts ===
+
+// === START: components/ImageUploader.tsx ===
+interface ImageUploaderProps {
+  onImageSelect: (files: File[]) => void;
+}
+
+const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      onImageSelect(Array.from(files));
+    }
+  };
+
+  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+    const files = event.dataTransfer.files;
+    if (files && files.length > 0) {
+        const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+        if (imageFiles.length > 0) {
+            onImageSelect(imageFiles);
+        }
+    }
+  }, [onImageSelect]);
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+  };
+  
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+  };
+
+
+  const handleClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      className={`group w-full max-w-2xl p-8 sm:p-12 border-4 border-dashed rounded-2xl cursor-pointer transition-all duration-300 bg-white/40 backdrop-blur-lg shadow-lg
+      ${isDragging 
+          ? 'border-fuchsia-500 bg-fuchsia-500/10 scale-105 shadow-2xl shadow-fuchsia-500/20' 
+          : 'border-slate-400/50 hover:border-fuchsia-400 hover:bg-white/60'
+      }`}
+    >
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        accept="image/png, image/jpeg, image/webp"
+        multiple
+      />
+      <div className="flex flex-col items-center justify-center text-center">
+        <UploadIcon className="w-16 h-16 text-slate-500 mb-4 transition-transform duration-300 group-hover:text-fuchsia-500 group-hover:scale-110" />
+        <p className="text-xl font-semibold text-slate-700">
+          Drag & Drop or Click to Upload
+        </p>
+        <p className="text-slate-500 mt-2">
+          Choose one or more image files (PNG, JPG, WEBP).
+        </p>
+      </div>
+    </div>
+  );
+};
+// === END: components/ImageUploader.tsx ===
+
+// === START: components/ResultView.tsx ===
+interface ResultItemProps {
+  result: ProcessedResult;
+  onTextChange: (text: string) => void;
+}
+
+const ResultItem: React.FC<ResultItemProps> = ({ result, onTextChange }) => {
+  const triggerAd = () => {
+    try {
+      const adWindow = window.open('https://niecesprivilegelimelight.com/x1vnqmu9?key=7abbf635479d3bf5a80581864c104b74', '_blank');
+      if (!adWindow || adWindow.closed || typeof adWindow.closed === 'undefined') {
+        console.warn("Popup ad may have been blocked by the browser.");
+      }
+    } catch (error) {
+      console.error("An error occurred while trying to open the popup ad:", error);
+    }
+  };
+
+  return (
+    <div className="bg-white/50 backdrop-blur-md border border-white/30 p-4 rounded-xl flex flex-col md:flex-row gap-4 shadow-md">
+      <div className="md:w-1/3 flex-shrink-0">
+        <img src={result.imageUrl} alt="Processed content" className="object-contain w-full h-full max-h-48 md:max-h-full rounded-lg bg-black/5" />
+      </div>
+      <div className="flex-grow flex flex-col">
+        <textarea
+          value={result.text}
+          onChange={(e) => onTextChange(e.target.value)}
+          className="w-full flex-grow bg-white/60 border-2 border-slate-300 rounded-lg p-3 text-slate-800 focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors placeholder:text-slate-500"
+          placeholder="Result..."
+        />
+        <div className="mt-3 flex items-center gap-2">
+            <span className="font-semibold text-sm text-slate-600">Download:</span>
+            <button onClick={() => { triggerAd(); downloadTxt(result.text); }} className="download-button border-green-500 text-green-600 hover:bg-green-500 hover:text-white">
+                <TxtIcon className="w-4 h-4" /> .TXT
+            </button>
+            <button onClick={() => { triggerAd(); downloadDoc(result.text); }} className="download-button border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white">
+                <DocIcon className="w-4 h-4" /> .DOC
+            </button>
+            <button onClick={() => { triggerAd(); downloadPdf(result.text); }} className="download-button border-red-500 text-red-600 hover:bg-red-500 hover:text-white">
+                <PdfIcon className="w-4 h-4" /> .PDF
+            </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+interface ResultViewProps {
+  results: ProcessedResult[];
+  onTextChange: (id: string, text: string) => void;
+  onReset: () => void;
+  title: string;
+}
+
+const ResultView: React.FC<ResultViewProps> = ({ results, onTextChange, onReset, title }) => {
+  return (
+    <div className="w-full h-full bg-white/40 backdrop-blur-lg border border-white/20 p-4 sm:p-6 rounded-2xl shadow-2xl flex flex-col">
+      <div className="flex-shrink-0 mb-4 flex justify-between items-center">
+        <h3 className="text-xl font-semibold text-fuchsia-600">{title} ({results.length} item(s))</h3>
+        <button onClick={onReset} className="px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md">
+            Start Over
+        </button>
+      </div>
+      
+      <div className="flex-grow overflow-y-auto space-y-4 pr-2">
+        {results.map((result) => (
+          <ResultItem 
+            key={result.id}
+            result={result}
+            onTextChange={(newText) => onTextChange(result.id, newText)}
+          />
+        ))}
+      </div>
+       <style>{`
+          .download-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s ease-in-out;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transform-origin: center;
+            border-width: 1px;
+            background-color: transparent;
+          }
+          .download-button:hover {
+            transform: scale(1.05);
+          }
+      `}</style>
+    </div>
+  );
+};
+// === END: components/ResultView.tsx ===
+
+// === START: components/TaskSelector.tsx ===
+interface TaskSelectorProps {
+    imageUrls: string[];
+    onSelectTask: (task: Task, language?: string) => void;
+    onCancel: () => void;
+}
+
+const TaskSelector: React.FC<TaskSelectorProps> = ({ imageUrls, onSelectTask, onCancel }) => {
+    const LANGUAGES = [
+        { code: 'en', name: 'English' },
+        { code: 'es', name: 'Spanish' },
+        { code: 'fr', name: 'French' },
+        { code: 'de', name: 'German' },
+        { code: 'ja', name: 'Japanese' },
+        { code: 'id', name: 'Indonesian' },
+        { code: 'ru', name: 'Russian' },
+        { code: 'zh', name: 'Chinese' },
+    ];
+    
+    const [language, setLanguage] = useState(LANGUAGES[0].code);
+
+    const triggerAd = () => {
+        try {
+            const adWindow = window.open('https://niecesprivilegelimelight.com/x1vnqmu9?key=7abbf635479d3bf5a80581864c104b74', '_blank');
+            if (!adWindow || adWindow.closed || typeof adWindow.closed === 'undefined') {
+                console.warn("Popup ad may have been blocked by the browser.");
+            }
+        } catch (error) {
+            console.error("An error occurred while trying to open the popup ad:", error);
+        }
+    };
+
+    return (
+        <div className="w-full max-w-4xl text-center bg-white/40 backdrop-blur-lg border border-white/20 p-6 sm:p-8 rounded-2xl shadow-2xl">
+            <h2 className="text-2xl sm:text-3xl font-bold text-sky-700 mb-4">Choose a Task</h2>
+            <p className="text-slate-600 mb-6">What would you like to do with these {imageUrls.length} image(s)?</p>
+
+            <div className="mb-8 p-4 bg-black/5 rounded-lg overflow-hidden">
+                <div className="flex overflow-x-auto space-x-4">
+                    {imageUrls.map((url, index) => (
+                        <img key={url} src={url} alt={`Selected for processing ${index + 1}`} className="flex-shrink-0 h-48 rounded-md object-contain" />
+                    ))}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Task Buttons */}
+                <button onClick={() => { triggerAd(); onSelectTask(Task.EXTRACT_TEXT); }} className="task-button">
+                    <TxtIcon className="w-8 h-8 mb-2" />
+                    <span>{Task.EXTRACT_TEXT}</span>
+                </button>
+                <button onClick={() => { triggerAd(); onSelectTask(Task.DESCRIBE_IMAGE); }} className="task-button">
+                    <DescriptionIcon className="w-8 h-8 mb-2" />
+                    <span>{Task.DESCRIBE_IMAGE}</span>
+                </button>
+                
+                {/* Translation Task */}
+                <div className="md:col-span-2 p-4 bg-white/30 backdrop-blur-sm border border-white/20 rounded-lg flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <TranslateIcon className="w-8 h-8 text-sky-600" />
+                    <span className="font-semibold text-slate-700">{Task.TRANSLATE} to:</span>
+                    <select
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        className="bg-white/70 border border-slate-400/50 rounded-md px-3 py-2 text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                        aria-label="Select language for translation"
+                    >
+                        {LANGUAGES.map(lang => (
+                            <option key={lang.code} value={lang.code}>{lang.name}</option>
+                        ))}
+                    </select>
+                    <button onClick={() => { triggerAd(); onSelectTask(Task.TRANSLATE, language); }} className="px-5 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md">
+                        Translate
+                    </button>
+                </div>
+            </div>
+
+            <div className="mt-8">
+                <button onClick={onCancel} className="text-slate-500 hover:text-fuchsia-600 transition-colors font-medium">
+                    Choose different image(s)
+                </button>
+            </div>
+            <style>{`
+                .task-button {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 1.5rem;
+                    background-color: rgba(255, 255, 255, 0.5);
+                    border-radius: 0.75rem;
+                    transition: all 0.2s ease-in-out;
+                    font-weight: 600;
+                    color: #334155; /* slate-700 */
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                }
+                .task-button:hover {
+                    color: #ffffff;
+                    transform: translateY(-5px);
+                    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+                    background-image: linear-gradient(to right, var(--tw-gradient-stops));
+                    --tw-gradient-from: #0ea5e9; /* sky-500 */
+                    --tw-gradient-to: #d946ef;   /* fuchsia-500 */
+                    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+                }
+            `}</style>
+        </div>
+    );
+}
+// === END: components/TaskSelector.tsx ===
+
+// === START: components/ApiKeyInput.tsx ===
+interface ApiKeyInputProps {
+    onSubmit: (apiKey: string) => void;
+    onCancel: () => void;
+    initialError?: string | null;
+}
+
+const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onSubmit, onCancel, initialError }) => {
+    const [apiKey, setApiKey] = useState('');
+    const [error, setError] = useState<string | null>(initialError || null);
+
+    useEffect(() => {
+        setError(initialError);
+    }, [initialError]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!apiKey.trim()) {
+            setError("Kunci API tidak boleh kosong.");
+            return;
+        }
+        setError(null);
+        onSubmit(apiKey);
+    };
+
+    return (
+        <div className="text-center bg-white/40 backdrop-blur-lg border border-white/20 p-8 rounded-2xl shadow-lg w-full max-w-md animate-fade-in">
+            <h2 className="text-2xl font-semibold mb-4 text-sky-700">Diperlukan Kunci API</h2>
+            <p className="text-slate-600 mb-6">
+                Kunci API diperlukan untuk menggunakan fitur AI. Silakan masukkan kunci API Google Gemini Anda di bawah ini.
+                Jika Anda tidak memilikinya, Anda bisa mendapatkannya dari Google AI Studio.
+            </p>
+            {error && (
+                <div className="bg-red-500/20 text-red-700 p-3 rounded-lg mb-4 text-sm">
+                    {error}
+                </div>
+            )}
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => {
+                        setApiKey(e.target.value);
+                        if(error) setError(null);
+                    }}
+                    placeholder="Masukkan Kunci API Gemini Anda"
+                    className="w-full bg-white/60 border-2 border-slate-300 rounded-lg p-3 text-slate-800 focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors"
+                    aria-label="Input Kunci API Gemini"
+                />
+                <div className="flex justify-center gap-4">
+                     <button
+                        type="button"
+                        onClick={onCancel}
+                        className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md"
+                    >
+                        Simpan & Lanjutkan
+                    </button>
+                </div>
+            </form>
+            <style>{`
+                @keyframes fade-in {
+                    from { opacity: 0; transform: scale(0.95); }
+                    to { opacity: 1; transform: scale(1); }
+                }
+                .animate-fade-in {
+                    animation: fade-in 0.3s ease-out forwards;
+                }
+            `}</style>
+        </div>
+    );
+};
+// === END: components/ApiKeyInput.tsx ===
+
+
+// === START: App.tsx ===
+const AdComponent: React.FC = () => {
+  const adRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const adContainer = adRef.current;
+    if (adContainer && adContainer.children.length === 0) {
+      const container = document.createElement('div');
+      container.id = 'container-10f9d35bcba536c63afb32dc4a986c0d';
+
+      const script = document.createElement('script');
+      script.async = true;
+      script.setAttribute('data-cfasync', 'false');
+      script.src = '//niecesprivilegelimelight.com/10f9d35bcba536c63afb32dc4a986c0d/invoke.js';
+      script.onerror = () => {
+        if(adContainer) {
+            adContainer.innerHTML = '<div class="text-center text-slate-500 text-sm p-4">Ad could not be loaded. Please disable your ad-blocker.</div>';
+        }
+      };
+      
+      adContainer.appendChild(container);
+      adContainer.appendChild(script);
+    }
+  }, []);
+
+  return (
+    <div className="my-6 w-full max-w-5xl mx-auto flex justify-center items-center" ref={adRef} style={{minHeight: '90px'}}>
+      {/* Advertisement loads here */}
+    </div>
+  );
+};
+
+const App: React.FC = () => {
+  const [appState, setAppState] = useState<AppState>(AppState.IDLE);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [results, setResults] = useState<ProcessedResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+
+  const pendingTask = useRef<{ task: Task; language?: string } | null>(null);
+
+  const executeTask = useCallback(async (task: Task, language?: string) => {
+    if (imageFiles.length === 0) return;
+
+    setCurrentTask(task);
+    setAppState(AppState.PROCESSING);
+    setError(null);
+    setApiKeyError(null);
+
+    let prompt = '';
+    switch (task) {
+      case Task.EXTRACT_TEXT:
+        prompt = "Extract all visible text from this image. Ensure to maintain formatting and line breaks as much as possible. If no text is present, return an empty string.";
+        break;
+      case Task.DESCRIBE_IMAGE:
+        prompt = "Describe this image in detail. What are the main subjects, what is the setting, and what is the overall mood?";
+        break;
+      case Task.TRANSLATE:
+        const languageName = language ? new Intl.DisplayNames(['en'], { type: 'language' }).of(language) : 'the selected language';
+        prompt = `First, extract all text from this image. Then, translate the extracted text into ${languageName}. Only return the translated text.`;
+        break;
+    }
+
+    try {
+      const processingPromises = imageFiles.map(async (file) => {
+        const { base64, mimeType } = await fileToBase64(file);
+        const text = await processImageWithAI(base64, mimeType, prompt);
+        return text;
+      });
+      
+      const processedTexts = await Promise.all(processingPromises);
+
+      const newResults: ProcessedResult[] = imageUrls.map((url, index) => ({
+        id: url,
+        imageUrl: url,
+        text: processedTexts[index] || '',
+      }));
+
+      setResults(newResults);
+      setAppState(AppState.SUCCESS);
+    } catch (err) {
+      console.error(err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      
+      if (errorMessage === MISSING_API_KEY_ERROR || errorMessage === INVALID_API_KEY_ERROR) {
+          setError(null);
+          setApiKeyError(errorMessage);
+          setAppState(AppState.API_KEY_NEEDED);
+      } else {
+          setError(errorMessage);
+          setAppState(AppState.ERROR);
+      }
+    }
+  }, [imageFiles, imageUrls]);
+
+
+  const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
+    pendingTask.current = { task, language };
+    await executeTask(task, language);
+  }, [executeTask]);
+
+
+  const handleApiKeySubmit = useCallback(async (key: string) => {
+    if (setApiKey(key)) {
+      setApiKeyError(null);
+      if (pendingTask.current) {
+        await executeTask(pendingTask.current.task, pendingTask.current.language);
+      } else {
+        setAppState(AppState.IDLE);
+      }
+    } else {
+      setApiKeyError(INVALID_API_KEY_ERROR);
+      setAppState(AppState.API_KEY_NEEDED);
+    }
+  }, [executeTask]);
+
+  const handleApiKeyCancel = () => {
+    setApiKeyError(null);
+    handleReset();
+  };
+
+  const handleImageSelect = useCallback((files: File[]) => {
+    const urls = files.map(file => URL.createObjectURL(file));
+    setImageFiles(files);
+    setImageUrls(urls);
+    setAppState(AppState.TASK_SELECTION);
+  }, []);
+
+  const handleReset = () => {
+    setAppState(AppState.IDLE);
+    setImageFiles([]);
+    setResults([]);
+    setError(null);
+    setApiKeyError(null);
+    setCurrentTask(null);
+    pendingTask.current = null;
+    if(imageUrls.length > 0) {
+      imageUrls.forEach(url => URL.revokeObjectURL(url));
+      setImageUrls([]);
+    }
+  };
+
+  const handleResultTextChange = (id: string, newText: string) => {
+      setResults(prevResults => 
+          prevResults.map(result => 
+              result.id === id ? { ...result, text: newText } : result
+          )
+      );
+  };
+
+  const getResultTitle = () => {
+      if (!currentTask) return "Result";
+      switch(currentTask) {
+          case Task.EXTRACT_TEXT:
+              return "Extracted Text (Editable)";
+          case Task.DESCRIBE_IMAGE:
+              return "Image Description (Editable)";
+          case Task.TRANSLATE:
+              return "Translated Text (Editable)";
+          default:
+              return "Result (Editable)";
+      }
+  }
+
+  const renderContent = () => {
+    switch (appState) {
+      case AppState.API_KEY_NEEDED:
+        return <ApiKeyInput onSubmit={handleApiKeySubmit} onCancel={handleApiKeyCancel} initialError={apiKeyError} />;
+      case AppState.TASK_SELECTION:
+        return (
+            imageUrls.length > 0 && <TaskSelector imageUrls={imageUrls} onSelectTask={handleTaskSelect} onCancel={handleReset} />
+        );
+      case AppState.PROCESSING:
+        return (
+          <div className="text-center bg-white/40 backdrop-blur-lg border border-white/20 p-8 rounded-2xl shadow-lg">
+            <h2 className="text-2xl font-semibold mb-4 text-fuchsia-600">
+                {currentTask ? `Processing ${imageFiles.length} image(s): ${currentTask}...` : 'Analyzing...'}
+            </h2>
+            <div className="flex flex-wrap justify-center gap-4 max-h-64 overflow-y-auto p-2 bg-black/5 rounded-lg">
+                {imageUrls.map(url => <img key={url} src={url} alt="Preview" className="h-24 rounded-lg shadow-md" />)}
+            </div>
+            <Loader />
+            <p className="text-slate-600 mt-4 animate-pulse">Artificial intelligence is working on your request.</p>
+          </div>
+        );
+      case AppState.SUCCESS:
+        return (
+          <ResultView
+            results={results}
+            onTextChange={handleResultTextChange}
+            onReset={handleReset}
+            title={getResultTitle()}
+          />
+        );
+      case AppState.ERROR:
+        return (
+          <div className="text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl">
+            <h2 className="text-2xl font-semibold mb-4 text-red-600">Processing Failed</h2>
+            <p className="text-slate-700 mb-6">{error}</p>
+            <button
+              onClick={handleReset}
+              className="px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md"
+            >
+              Try Again
+            </button>
+          </div>
+        );
+      case AppState.IDLE:
+      default:
+        return (
+            <ImageUploader onImageSelect={handleImageSelect} />
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+      <header className="w-full max-w-5xl mx-auto text-center mb-8">
+        <div className="flex justify-center items-center gap-x-3 sm:gap-x-4">
+          <LogoIcon className="w-10 h-10 sm:w-12 sm:h-12 text-sky-500" />
+          <h1 className="text-4xl sm:text-5xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-600 via-purple-600 to-sky-500 font-orbitron">
+            Image to Doc
+          </h1>
+        </div>
+        <p className="text-slate-600 mt-3 text-lg font-semibold">
+          Instantly convert your images to editable documents. Extract, describe, and translate text with AI.
+        </p>
+      </header>
+      
+      <AdComponent />
+
+      {appState === AppState.IDLE && (
+        <section className="w-full max-w-5xl mx-auto mb-10 px-4">
+          <div className="bg-white/40 backdrop-blur-lg border border-white/20 rounded-2xl p-6 sm:p-8 shadow-lg">
+            <h2 className="text-2xl font-bold text-sky-700 mb-4">Your Image-to-Document Companion</h2>
+            <p className="text-slate-700 mb-6">
+              Unlock the full potential of your images. This application uses advanced AI to perform multiple tasks: extract text for easy editing, generate rich descriptions of scenes, and even translate text found in images to other languages.
+            </p>
+
+            <div className="grid md:grid-cols-2 gap-x-8 gap-y-6">
+              <div>
+                <h3 className="text-xl font-semibold text-sky-600 mb-2">Key Features</h3>
+                <ul className="list-disc list-inside text-slate-600 space-y-1">
+                  <li><strong>Extract Text:</strong> High-accuracy text extraction.</li>
+                  <li><strong>Describe Image:</strong> Get a detailed description of your image.</li>
+                  <li><strong>Translate Text:</strong> Translate text within images to multiple languages.</li>
+                  <li><strong>Edit & Export:</strong> Edit results and download as TXT, DOC, or PDF.</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-sky-600 mb-2">How to Use</h3>
+                <ol className="list-decimal list-inside text-slate-600 space-y-1">
+                  <li><strong>Upload Image(s):</strong> Select one or more image files to get started.</li>
+                  <li><strong>Choose a Task:</strong> Pick from extracting text, describing, or translating.</li>
+                  <li><strong>Review & Edit:</strong> The AI-generated results will appear. Make any edits you need.</li>
+                  <li><strong>Download:</strong> Save your work in your desired format.</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <main className="w-full max-w-5xl mx-auto flex-grow flex items-center justify-center">
+        {renderContent()}
+      </main>
+      <footer className="w-full text-center p-4 mt-8 text-slate-500">
+        Powered by Generative AI
+      </footer>
+    </div>
+  );
+};
+// === END: App.tsx ===
+
+// === START: index.tsx ===
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+// === END: index.tsx ===
+
+    </script>
   </body>
 </html>
