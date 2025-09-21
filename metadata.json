@@ -1,0 +1,5 @@
+{
+  "name": "Image to Doc",
+  "description": "Instantly convert your images to editable documents. This AI-powered tool extracts text from images, describes image content, and translates text. Results can be edited and exported to various document formats.",
+  "requestFramePermissions": []
+}
