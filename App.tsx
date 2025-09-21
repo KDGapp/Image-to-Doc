@@ -34,9 +34,11 @@ const AdComponent: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  // Check for API key immediately. If not present, render an error message and stop.
-  // This is more robust than a useEffect and prevents the "white flash" crash.
-  if (!process.env.API_KEY) {
+  // Check for API key immediately in a way that is safe for browser environments
+  // where `process` might not be defined. This prevents a "white screen" crash.
+  const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+
+  if (!apiKey) {
     return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center p-4">
             <div className="text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl max-w-2xl">
