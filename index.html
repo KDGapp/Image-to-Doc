@@ -153,7 +153,7 @@ const translations = {
         apiKeyInputPlaceholder: "Enter your API Key",
         apiKeySubmitButton: "Retry with my Key",
         getApiKeyButton: "Get Your Free API Key",
-        apiKeySecurityInfo: "Your API key is safe. It's used only in your browser and never sent to our servers.",
+        apiKeySecurityInfo: "Your API key is stored securely in your browser for future use and is never sent to our servers.",
         apiKeyBenefitsInfo: "Process multiple files at once and enjoy higher limits by using your own key.",
         // Footer
         footerText: "Powered by Generative AI",
@@ -214,7 +214,7 @@ const translations = {
         apiKeyInputPlaceholder: "Masukkan Kunci API Anda",
         apiKeySubmitButton: "Coba Lagi dengan Kunci Saya",
         getApiKeyButton: "Dapatkan Kunci API Gratis Anda",
-        apiKeySecurityInfo: "Kunci API Anda aman. Kunci ini hanya digunakan di browser Anda dan tidak pernah dikirim ke server kami.",
+        apiKeySecurityInfo: "Kunci API Anda disimpan dengan aman di browser Anda untuk penggunaan di masa mendatang dan tidak pernah dikirim ke server kami.",
         apiKeyBenefitsInfo: "Proses beberapa file sekaligus dan nikmati batas yang lebih tinggi dengan menggunakan kunci Anda sendiri.",
         // Footer
         footerText: "Didukung oleh Generative AI",
@@ -633,6 +633,18 @@ const App = () => {
     const [currentTask, setCurrentTask] = useState(null);
     const [currentTaskParams, setCurrentTaskParams] = useState(null);
     const userApiKeyRef = useRef(null);
+
+    useEffect(() => {
+        try {
+            const savedApiKey = localStorage.getItem('userApiKey');
+            if (savedApiKey) {
+                userApiKeyRef.current = savedApiKey;
+            }
+        } catch (e) {
+            console.error("Could not access local storage:", e);
+        }
+    }, []);
+
     const handleTaskSelect = useCallback(async (task, language, apiKey) => {
         if (imageFiles.length === 0)
             return;
@@ -667,13 +679,23 @@ const App = () => {
             }));
             setResults(newResults);
             setAppState(AppState.SUCCESS);
-            userApiKeyRef.current = null; // Clear user API key on success
         }
         catch (err) {
             console.error(err);
+            const errorMessage = err instanceof Error ? err.message : t.unknownError;
+
+            if (errorMessage === "The provided API key is invalid or lacks permissions.") {
+                try {
+                    localStorage.removeItem('userApiKey');
+                } catch (e) {
+                    console.error("Could not access local storage:", e);
+                }
+                userApiKeyRef.current = null;
+            }
+
             setError({
                 title: t.errorProcessingFailed,
-                message: err instanceof Error ? err.message : t.unknownError,
+                message: errorMessage,
             });
             setAppState(AppState.ERROR);
         }
@@ -691,13 +713,17 @@ const App = () => {
         setError(null);
         setCurrentTask(null);
         setCurrentTaskParams(null);
-        userApiKeyRef.current = null;
         if (imageUrls.length > 0) {
             imageUrls.forEach(url => URL.revokeObjectURL(url));
             setImageUrls([]);
         }
     }, [imageUrls]);
     const handleRetryWithUserKey = (apiKey) => {
+        try {
+            localStorage.setItem('userApiKey', apiKey);
+        } catch (e) {
+            console.error("Could not access local storage:", e);
+        }
         userApiKeyRef.current = apiKey;
         if (currentTask && currentTaskParams) {
             handleTaskSelect(currentTask, currentTaskParams.language, apiKey);

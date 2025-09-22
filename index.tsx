@@ -78,7 +78,7 @@ const translations = {
         apiKeyInputPlaceholder: "Enter your API Key",
         apiKeySubmitButton: "Retry with my Key",
         getApiKeyButton: "Get Your Free API Key",
-        apiKeySecurityInfo: "Your API key is safe. It's used only in your browser and never sent to our servers.",
+        apiKeySecurityInfo: "Your API key is stored securely in your browser for future use and is never sent to our servers.",
         apiKeyBenefitsInfo: "Process multiple files at once and enjoy higher limits by using your own key.",
         // Footer
         footerText: "Powered by Generative AI",
@@ -139,7 +139,7 @@ const translations = {
         apiKeyInputPlaceholder: "Masukkan Kunci API Anda",
         apiKeySubmitButton: "Coba Lagi dengan Kunci Saya",
         getApiKeyButton: "Dapatkan Kunci API Gratis Anda",
-        apiKeySecurityInfo: "Kunci API Anda aman. Kunci ini hanya digunakan di browser Anda dan tidak pernah dikirim ke server kami.",
+        apiKeySecurityInfo: "Kunci API Anda disimpan dengan aman di browser Anda untuk penggunaan di masa mendatang dan tidak pernah dikirim ke server kami.",
         apiKeyBenefitsInfo: "Proses beberapa file sekaligus dan nikmati batas yang lebih tinggi dengan menggunakan kunci Anda sendiri.",
         // Footer
         footerText: "Didukung oleh Generative AI",
@@ -398,8 +398,8 @@ const ResultItem = ({ result, onTextChange }) => {
         React.createElement("div", { className: "md:w-1/3 flex-shrink-0" },
             React.createElement("img", { src: result.imageUrl, alt: t.processedAlt, className: "object-contain w-full h-full max-h-48 md:max-h-full rounded-lg bg-black/5" })),
         React.createElement("div", { className: "flex-grow flex flex-col" },
-            // FIX: Changed `value` to `defaultValue` to fix type error. The component logic supports this change.
-            React.createElement("textarea", { defaultValue: result.text, onChange: (e) => onTextChange(e.target.value), className: "w-full flex-grow bg-white/60 border-2 border-slate-300 rounded-lg p-3 text-slate-800 focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors placeholder:text-slate-500" }),
+            // FIX: Changed `defaultValue` to `value` to fix type error. Using `value` with `onChange` creates a standard controlled component.
+            React.createElement("textarea", { value: result.text, onChange: (e) => onTextChange(e.target.value), className: "w-full flex-grow bg-white/60 border-2 border-slate-300 rounded-lg p-3 text-slate-800 focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors placeholder:text-slate-500" }),
             React.createElement("div", { className: "mt-3 flex items-center gap-2" },
                 React.createElement("span", { className: "font-semibold text-sm text-slate-600" }, t.downloadLabel),
                 React.createElement("button", { onClick: () => { triggerAd(); downloadTxt(result.text); }, className: "download-button border-green-500 text-green-600 hover:bg-green-500 hover:text-white" },
@@ -465,7 +465,8 @@ const TaskSelector = ({ imageUrls, onSelectTask, onCancel, onRemoveImage }) => {
             }
         }
         catch (error) {
-            console.error(t.popupError, error);
+            // FIX: Cast unknown error to string to prevent type errors.
+            console.error(t.popupError, String(error));
         }
     };
     return (React.createElement("div", { className: "w-full max-w-4xl text-center bg-white/40 backdrop-blur-lg border border-white/20 p-6 sm:p-8 rounded-2xl shadow-2xl" },
@@ -489,8 +490,8 @@ const TaskSelector = ({ imageUrls, onSelectTask, onCancel, onRemoveImage }) => {
                     t.taskTranslate,
                     " ",
                     t.translateToAction),
-                // FIX: Changed `value` to `defaultValue` and added a `key` to fix type error and ensure re-rendering.
-                React.createElement("select", { key: language, defaultValue: language, onChange: (e) => setLanguage(e.target.value), className: "bg-white/70 border border-slate-400/50 rounded-md px-3 py-2 text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500", "aria-label": "Select language for translation" }, LANGUAGES.map(lang => (React.createElement("option", { key: lang.code, value: lang.code }, lang.name)))),
+                // FIX: Changed `defaultValue` to `value` to fix type error. Using `value` makes this a controlled component.
+                React.createElement("select", { key: language, value: language, onChange: (e) => setLanguage(e.target.value), className: "bg-white/70 border border-slate-400/50 rounded-md px-3 py-2 text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500", "aria-label": "Select language for translation" }, LANGUAGES.map(lang => (React.createElement("option", { key: lang.code, value: lang.code }, lang.name)))),
                 React.createElement("button", { onClick: () => { triggerAd(); onSelectTask(Task.TRANSLATE, language); }, className: "px-5 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.translateButton))),
         React.createElement("div", { className: "mt-8" },
             React.createElement("button", { onClick: onCancel, className: "text-slate-500 hover:text-fuchsia-600 transition-colors font-medium" }, t.cancelTaskSelection)),
@@ -566,6 +567,17 @@ const App = () => {
     const [currentTaskParams, setCurrentTaskParams] = useState(null);
     const userApiKeyRef = useRef(null);
 
+    useEffect(() => {
+        try {
+            const savedApiKey = localStorage.getItem('userApiKey');
+            if (savedApiKey) {
+                userApiKeyRef.current = savedApiKey;
+            }
+        } catch (e) {
+            console.error("Could not access local storage:", e);
+        }
+    }, []);
+
     const handleTaskSelect = useCallback(async (task, language, apiKey) => {
         if (imageFiles.length === 0)
             return;
@@ -600,13 +612,23 @@ const App = () => {
             }));
             setResults(newResults);
             setAppState(AppState.SUCCESS);
-            userApiKeyRef.current = null; // Clear user API key on success
         }
         catch (err) {
             console.error(err);
+            const errorMessage = err instanceof Error ? err.message : t.unknownError;
+
+            if (errorMessage === "The provided API key is invalid or lacks permissions.") {
+                try {
+                    localStorage.removeItem('userApiKey');
+                } catch (e) {
+                    console.error("Could not access local storage:", e);
+                }
+                userApiKeyRef.current = null;
+            }
+
             setError({
                 title: t.errorProcessingFailed,
-                message: err instanceof Error ? err.message : t.unknownError,
+                message: errorMessage,
             });
             setAppState(AppState.ERROR);
         }
@@ -624,13 +646,17 @@ const App = () => {
         setError(null);
         setCurrentTask(null);
         setCurrentTaskParams(null);
-        userApiKeyRef.current = null;
         if (imageUrls.length > 0) {
             imageUrls.forEach(url => URL.revokeObjectURL(url));
             setImageUrls([]);
         }
     }, [imageUrls]);
     const handleRetryWithUserKey = (apiKey) => {
+        try {
+            localStorage.setItem('userApiKey', apiKey);
+        } catch (e) {
+            console.error("Could not access local storage:", e);
+        }
         userApiKeyRef.current = apiKey;
         if (currentTask && currentTaskParams) {
             handleTaskSelect(currentTask, currentTaskParams.language, apiKey);
