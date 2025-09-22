@@ -1,4 +1,4 @@
-export const handler = async () => {
+exports.handler = async () => {
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
