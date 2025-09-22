@@ -312,23 +312,59 @@ const downloadPdf = (text, alertMessage) => {
 
 // === START: services/geminiService.ts ===
 let ai = null;
-function getAiClient() {
+let envApiKeyPromise = null; // Cache the promise for the env key
+
+function getEnvApiKey() {
+    if (envApiKeyPromise) {
+        return envApiKeyPromise;
+    }
+
+    envApiKeyPromise = (async () => {
+        // First, try to fetch from Netlify function
+        try {
+            const response = await fetch('/.netlify/functions/api');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.apiKey) {
+                    return data.apiKey;
+                }
+            }
+        } catch (error) {
+            console.warn("Could not fetch API key from server. This may be expected during local development.", error);
+        }
+        
+        // Fallback to window.process.env for other environments
+        if (window.process?.env?.API_KEY) {
+            return window.process.env.API_KEY;
+        }
+
+        return null;
+    })();
+
+    return envApiKeyPromise;
+}
+
+async function getAiClient() {
     if (ai) return ai; // Return cached instance
+
     const userApiKey = localStorage.getItem('user_api_key');
-    const envApiKey = window.process?.env?.API_KEY;
-    const apiKey = userApiKey || envApiKey;
+    const apiKey = userApiKey || await getEnvApiKey();
+    
     if (!apiKey) {
         throw new Error("API_KEY is not configured.");
     }
+    
     ai = new GoogleGenAI({ apiKey });
     return ai;
 }
+
 function resetAiClient() {
     ai = null;
 }
+
 async function processImageWithAI(base64Image, mimeType, prompt) {
     try {
-        const client = getAiClient();
+        const client = await getAiClient(); // Now awaited
         const imagePart = {
             inlineData: {
                 mimeType: mimeType,
