@@ -151,6 +151,14 @@ const translations = {
         apiKeyMissingError: "API_KEY is not configured. Please ensure the API_KEY environment variable is set in your hosting environment.",
         unknownError: "An unknown error occurred. Please try again later.",
         tryAgainButton: "Try Again",
+        // API Key Input
+        apiKeyErrorTitle: "API Key Required",
+        apiKeyErrorDescription: "The default API key is currently unavailable. To continue, please provide your own Google Gemini API key.",
+        apiKeyBenefit: "You can process many files for free with your own key.",
+        apiKeyInputLabel: "Your Gemini API Key",
+        apiKeySaveButton: "Save & Retry",
+        getApiKeyButton: "Get Your Free API Key",
+        invalidApiKeyError: "The API key you provided is invalid. Please check the key and try again.",
         // Footer
         footerText: "Powered by Generative AI",
         // Misc
@@ -208,6 +216,14 @@ const translations = {
         apiKeyMissingError: "API_KEY tidak dikonfigurasi. Harap pastikan variabel lingkungan API_KEY diatur di lingkungan hosting Anda.",
         unknownError: "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi nanti.",
         tryAgainButton: "Coba Lagi",
+        // API Key Input
+        apiKeyErrorTitle: "Kunci API Diperlukan",
+        apiKeyErrorDescription: "Kunci API default saat ini tidak tersedia. Untuk melanjutkan, harap berikan kunci API Google Gemini Anda sendiri.",
+        apiKeyBenefit: "Anda dapat memproses banyak file secara gratis dengan kunci Anda sendiri.",
+        apiKeyInputLabel: "Kunci API Gemini Anda",
+        apiKeySaveButton: "Simpan & Coba Lagi",
+        getApiKeyButton: "Dapatkan Kunci API Gratis Anda",
+        invalidApiKeyError: "Kunci API yang Anda berikan tidak valid. Silakan periksa kembali dan coba lagi.",
         // Footer
         footerText: "Didukung oleh Generative AI",
         // Misc
@@ -293,17 +309,18 @@ const downloadPdf = (text, alertMessage) => {
 // === START: services/geminiService.ts ===
 let ai = null;
 function getAiClient() {
-    // Access the API key from the window.process polyfill.
-    const apiKey = window.process?.env?.API_KEY;
-    // Provide a clear error message if the API key is missing.
+    if (ai) return ai; // Return cached instance
+    const userApiKey = localStorage.getItem('user_api_key');
+    const envApiKey = window.process?.env?.API_KEY;
+    const apiKey = userApiKey || envApiKey;
     if (!apiKey) {
-        throw new Error("API_KEY is not configured. Please ensure the API_KEY environment variable is set in your hosting environment.");
+        throw new Error("API_KEY is not configured.");
     }
-    if (!ai) {
-        // Initialize the AI client only if it hasn't been already.
-        ai = new GoogleGenAI({ apiKey: apiKey });
-    }
+    ai = new GoogleGenAI({ apiKey });
     return ai;
+}
+function resetAiClient() {
+    ai = null;
 }
 async function processImageWithAI(base64Image, mimeType, prompt) {
     try {
@@ -325,7 +342,14 @@ async function processImageWithAI(base64Image, mimeType, prompt) {
     }
     catch (error) {
         console.error("Error calling AI service:", error);
-        // The App component will catch this and display a more specific message now.
+        const userApiKey = localStorage.getItem('user_api_key');
+        // Check if the error indicates an invalid API key, especially if it was user-provided
+        if (userApiKey && error.message && (error.message.toLowerCase().includes('api key not valid') || error.message.toLowerCase().includes('permission denied'))) {
+             localStorage.removeItem('user_api_key');
+             resetAiClient(); // Ensure the bad client instance is removed
+             throw new Error("Invalid API Key.");
+        }
+        // For other errors, re-throw them to be handled by the App component
         throw error;
     }
 }
@@ -412,8 +436,26 @@ const ImageUploader = ({ onImageSelect }) => {
 // === END: components/ImageUploader.tsx ===
 
 // === START: components/ApiKeyInput.tsx ===
-const ApiKeyInput = () => {
-    return null;
+const ApiKeyInput = ({ onSave }) => {
+    const { t } = useLocalization();
+    const [apiKey, setApiKey] = useState('');
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (apiKey.trim()) {
+            onSave(apiKey.trim());
+        }
+    };
+    return (React.createElement("div", { className: "w-full max-w-lg text-center" },
+        React.createElement("form", { onSubmit: handleSubmit, className: "bg-white/50 backdrop-blur-md border border-white/30 p-6 sm:p-8 rounded-2xl shadow-xl" },
+            React.createElement("h3", { className: "text-2xl font-bold text-fuchsia-600 mb-3" }, t.apiKeyErrorTitle),
+            React.createElement("p", { className: "text-slate-600 mb-2" }, t.apiKeyErrorDescription),
+            React.createElement("p", { className: "text-sm text-sky-600 font-medium mb-5" }, t.apiKeyBenefit),
+            React.createElement("div", { className: "mb-4" },
+                React.createElement("label", { htmlFor: "apiKeyInput", className: "sr-only" }, t.apiKeyInputLabel),
+                React.createElement("input", { id: "apiKeyInput", type: "password", value: apiKey, onChange: (e) => setApiKey(e.target.value), placeholder: t.apiKeyInputLabel, className: "w-full bg-white/80 border-2 border-slate-300 rounded-lg px-4 py-2 text-slate-800 focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors", required: true })),
+            React.createElement("div", { className: "flex flex-col sm:flex-row gap-3 justify-center" },
+                React.createElement("a", { href: "https://aistudio.google.com/app/apikey", target: "_blank", rel: "noopener noreferrer", className: "w-full sm:w-auto px-5 py-2.5 bg-white border border-slate-400 text-slate-700 font-semibold rounded-lg transition-all transform hover:scale-105 shadow-sm hover:bg-slate-50" }, t.getApiKeyButton),
+                React.createElement("button", { type: "submit", className: "w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.apiKeySaveButton)))));
 };
 // === END: components/ApiKeyInput.tsx ===
 
@@ -595,6 +637,10 @@ const App = () => {
     const [results, setResults] = useState([]);
     const [error, setError] = useState(null);
     const [currentTask, setCurrentTask] = useState(null);
+    const isApiKeyError = (message) => {
+        const lowerMessage = message.toLowerCase();
+        return lowerMessage.includes('api_key is not configured') || lowerMessage.includes('invalid api key');
+    };
     const handleTaskSelect = useCallback(async (task, language) => {
         if (imageFiles.length === 0)
             return;
@@ -635,7 +681,10 @@ const App = () => {
             if (err instanceof Error) {
                 if (err.message.includes("API_KEY is not configured")) {
                     message = t.apiKeyMissingError;
-                } else {
+                } else if (err.message.includes("Invalid API Key")) {
+                    message = t.invalidApiKeyError;
+                }
+                else {
                     message = err.message;
                 }
             }
@@ -662,6 +711,12 @@ const App = () => {
             imageUrls.forEach(url => URL.revokeObjectURL(url));
             setImageUrls([]);
         }
+    };
+    const handleSaveApiKeyAndRetry = (apiKey) => {
+        localStorage.setItem('user_api_key', apiKey);
+        resetAiClient(); // Reset the AI client to use the new key
+        setError(null);
+        setAppState(AppState.TASK_SELECTION); // Go back to task selection to retry
     };
     const handleResultTextChange = (id, newText) => {
         setResults(prevResults => prevResults.map(result => result.id === id ? { ...result, text: newText } : result));
@@ -693,6 +748,9 @@ const App = () => {
             case AppState.SUCCESS:
                 return (React.createElement(ResultView, { results: results, onTextChange: handleResultTextChange, onReset: handleReset, title: getResultTitle() }));
             case AppState.ERROR:
+                if (error && isApiKeyError(error.message)) {
+                    return React.createElement(ApiKeyInput, { onSave: handleSaveApiKeyAndRetry });
+                }
                 return (React.createElement("div", { className: "text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl" },
                     React.createElement("h2", { className: "text-2xl font-semibold mb-4 text-red-600" }, (error === null || error === void 0 ? void 0 : error.title) || t.errorProcessingFailed),
                     React.createElement("p", { className: "text-slate-700 mb-6" }, (error === null || error === void 0 ? void 0 : error.message) || t.unknownError),
