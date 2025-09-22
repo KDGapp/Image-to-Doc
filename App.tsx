@@ -5,8 +5,7 @@ import ImageUploader from './components/ImageUploader.tsx';
 import ResultView from './components/ResultView.tsx';
 import Loader from './components/Loader.tsx';
 import TaskSelector from './components/TaskSelector.tsx';
-import ApiKeyInput from './components/ApiKeyInput.tsx';
-import { processImageWithAI, setUserApiKey, MISSING_API_KEY_ERROR, INVALID_API_KEY_ERROR } from './services/geminiService.ts';
+import { processImageWithAI, MISSING_API_KEY_ERROR, INVALID_API_KEY_ERROR } from './services/geminiService.ts';
 import { fileToBase64 } from './utils/fileUtils.ts';
 import { LogoIcon } from './components/Icons.tsx';
 
@@ -48,7 +47,6 @@ const App: React.FC = () => {
   const [results, setResults] = useState<ProcessedResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
     if (imageFiles.length === 0) return;
@@ -56,7 +54,6 @@ const App: React.FC = () => {
     setCurrentTask(task);
     setAppState(AppState.PROCESSING);
     setError(null);
-    setApiKeyError(null);
 
     let prompt = '';
     switch (task) {
@@ -91,15 +88,15 @@ const App: React.FC = () => {
       setAppState(AppState.SUCCESS);
     } catch (err) {
       console.error(err);
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      let errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       
+      // Berikan pesan yang lebih ramah pengguna untuk kesalahan terkait API
       if (errorMessage === MISSING_API_KEY_ERROR || errorMessage === INVALID_API_KEY_ERROR) {
-          setApiKeyError(errorMessage);
-          setAppState(AppState.API_KEY_NEEDED);
-      } else {
-          setError(errorMessage);
-          setAppState(AppState.ERROR);
+        errorMessage = "Gagal memproses permintaan. Kunci API aplikasi mungkin hilang atau tidak valid.";
       }
+      
+      setError(errorMessage);
+      setAppState(AppState.ERROR);
     }
   }, [imageFiles, imageUrls]);
 
@@ -115,19 +112,12 @@ const App: React.FC = () => {
     setImageFiles([]);
     setResults([]);
     setError(null);
-    setApiKeyError(null);
     setCurrentTask(null);
     if(imageUrls.length > 0) {
       imageUrls.forEach(url => URL.revokeObjectURL(url));
       setImageUrls([]);
     }
   };
-
-  const handleApiKeySubmit = useCallback((apiKey: string) => {
-    setUserApiKey(apiKey);
-    setAppState(AppState.TASK_SELECTION);
-    setApiKeyError(null);
-  }, []);
   
   const handleResultTextChange = (id: string, newText: string) => {
       setResults(prevResults => 
@@ -177,14 +167,6 @@ const App: React.FC = () => {
             onTextChange={handleResultTextChange}
             onReset={handleReset}
             title={getResultTitle()}
-          />
-        );
-      case AppState.API_KEY_NEEDED:
-        return (
-          <ApiKeyInput
-            onSubmit={handleApiKeySubmit}
-            onCancel={handleReset}
-            initialError={apiKeyError}
           />
         );
       case AppState.ERROR:

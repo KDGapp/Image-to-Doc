@@ -2,18 +2,16 @@
 import { GoogleGenAI } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
-let userApiKey: string | null = null;
 
-export const MISSING_API_KEY_ERROR = "Layanan AI tidak diinisialisasi. Pastikan kunci API Anda dikonfigurasi dengan benar atau berikan satu di aplikasi.";
-export const INVALID_API_KEY_ERROR = "Kunci API yang Anda berikan tidak valid atau tidak memiliki izin yang benar. Silakan periksa kunci Anda.";
+export const MISSING_API_KEY_ERROR = "Aplikasi tidak dikonfigurasi dengan benar. Kunci API tidak ditemukan.";
+export const INVALID_API_KEY_ERROR = "Kunci API yang diberikan tidak valid. Silakan periksa konfigurasi aplikasi.";
 
 function initializeAIClient(): boolean {
-  // Prioritas: 1. Klien yang sudah diinisialisasi, 2. Kunci yang disediakan pengguna, 3. Variabel lingkungan
   if (ai) {
     return true;
   }
   
-  const key = userApiKey || (typeof process !== 'undefined' && process.env ? process.env.API_KEY : '');
+  const key = typeof process !== 'undefined' && process.env ? process.env.API_KEY : '';
 
   if (key && key.trim() !== '') {
     try {
@@ -29,17 +27,11 @@ function initializeAIClient(): boolean {
   return false;
 }
 
-export function setUserApiKey(apiKey: string) {
-  userApiKey = apiKey;
-  ai = null; // Paksa inisialisasi ulang pada panggilan berikutnya
-}
-
 export async function processImageWithAI(base64Image: string, mimeType: string, prompt: string): Promise<string> {
   if (!initializeAIClient()) {
     throw new Error(MISSING_API_KEY_ERROR);
   }
 
-  // Variabel 'ai' dijamin non-null di sini jika initializeAIClient mengembalikan true.
   const client = ai!; 
 
   try {
