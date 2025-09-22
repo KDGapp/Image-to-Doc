@@ -1,0 +1,722 @@
+// BUNDLED APPLICATION CODE
+
+// Import dependencies from importmap
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { GoogleGenAI } from "@google/genai";
+
+const { useState, useCallback, useEffect, useRef, createContext, useContext } = React;
+
+// === START: types.ts ===
+var AppState;
+(function (AppState) {
+    AppState[AppState["IDLE"] = 0] = "IDLE";
+    AppState[AppState["TASK_SELECTION"] = 1] = "TASK_SELECTION";
+    AppState[AppState["PROCESSING"] = 2] = "PROCESSING";
+    AppState[AppState["SUCCESS"] = 3] = "SUCCESS";
+    AppState[AppState["ERROR"] = 4] = "ERROR";
+})(AppState || (AppState = {}));
+var Task;
+(function (Task) {
+    Task["EXTRACT_TEXT"] = "Extract Text";
+    Task["DESCRIBE_IMAGE"] = "Describe Image";
+    Task["TRANSLATE"] = "Translate Text in Image";
+})(Task || (Task = {}));
+// === END: types.ts ===
+
+// === START: localization/translations.ts ===
+const translations = {
+    en: {
+        appTitle: "Image to Doc",
+        appSubtitle: "Instantly convert your images to editable documents. Extract, describe, and translate text with AI.",
+        adError: "Ad could not be loaded. Please disable your ad-blocker.",
+        // Idle Screen
+        companionTitle: "Your Image-to-Document Companion",
+        companionDescription: "Unlock the full potential of your images. This application uses advanced AI to perform multiple tasks: extract text for easy editing, generate rich descriptions of scenes, and even translate text found in images to other languages.",
+        keyFeatures: "Key Features",
+        featureExtract: "<strong>Extract Text:</strong> High-accuracy text extraction.",
+        featureDescribe: "<strong>Describe Image:</strong> Get a detailed description of your image.",
+        featureTranslate: "<strong>Translate Text:</strong> Translate text within images to multiple languages.",
+        featureExport: "<strong>Edit & Export:</strong> Edit results and download as TXT, DOC, or PDF.",
+        howToUse: "How to Use",
+        stepUpload: "<strong>Upload Image(s):</strong> Select one or more image files to get started.",
+        stepChooseTask: "<strong>Choose a Task:</strong> Pick from extracting text, describing, or translating.",
+        stepReview: "<strong>Review & Edit:</strong> The AI-generated results will appear. Make any edits you need.",
+        stepDownload: "<strong>Download:</strong> Save your work in your desired format.",
+        // Image Uploader
+        uploaderTitle: "Drag & Drop or Click to Upload",
+        uploaderSubtitleMultiple: "Choose one or more image files (PNG, JPG, WEBP).",
+        // Task Selector
+        taskSelectorTitle: "Choose a Task",
+        taskSelectorSubtitle: (count) => `What would you like to do with these ${count} image(s)?`,
+        taskExtract: "Extract Text",
+        taskDescribe: "Describe Image",
+        taskTranslate: "Translate Text in Image",
+        translateToAction: "Translate to:",
+        translateButton: "Translate",
+        cancelTaskSelection: "Choose different image(s)",
+        imageAlt: (index) => `Selected for processing ${index + 1}`,
+        // Processing View
+        processingMessage: (count, task) => `Processing ${count} image(s): ${task}...`,
+        analyzing: "Analyzing...",
+        aiWorking: "Artificial intelligence is working on your request.",
+        // Result View
+        resultTitle: "Result",
+        resultTitleExtract: "Extracted Text (Editable)",
+        resultTitleDescribe: "Image Description (Editable)",
+        resultTitleTranslate: "Translated Text (Editable)",
+        resultTitleDefault: "Result (Editable)",
+        itemsCount: (count) => `(${count} item(s))`,
+        startOverButton: "Start Over",
+        downloadLabel: "Download:",
+        resultPlaceholder: "Result...",
+        processedAlt: "Processed content",
+        // Error View
+        errorProcessingFailed: "Processing Failed",
+        unknownError: "An unknown error occurred. Please try again later.",
+        tryAgainButton: "Try Again",
+        apiKeyPrompt: "Alternatively, if you have your own API key, you can enter it below to proceed.",
+        apiKeyInputPlaceholder: "Enter your API Key",
+        apiKeySubmitButton: "Retry with my Key",
+        // Footer
+        footerText: "Powered by Generative AI",
+        // Misc
+        popupBlocked: "Popup ad may have been blocked by the browser.",
+        popupError: "An error occurred while trying to open the popup ad:",
+        pdfError: "Failed to create PDF. Please ensure the jsPDF library is loaded correctly.",
+    },
+    id: {
+        appTitle: "Gambar ke Dok",
+        appSubtitle: "Ubah gambar Anda menjadi dokumen yang dapat diedit secara instan. Ekstrak, deskripsikan, dan terjemahkan teks dengan AI.",
+        adError: "Iklan tidak dapat dimuat. Harap nonaktifkan pemblokir iklan Anda.",
+        // Idle Screen
+        companionTitle: "Pendamping Gambar-ke-Dokumen Anda",
+        companionDescription: "Buka potensi penuh dari gambar Anda. Aplikasi ini menggunakan AI canggih untuk melakukan banyak tugas: mengekstrak teks untuk pengeditan yang mudah, menghasilkan deskripsi adegan yang kaya, dan bahkan menerjemahkan teks yang ditemukan dalam gambar ke bahasa lain.",
+        keyFeatures: "Fitur Utama",
+        featureExtract: "<strong>Ekstrak Teks:</strong> Ekstraksi teks dengan akurasi tinggi.",
+        featureDescribe: "<strong>Deskripsikan Gambar:</strong> Dapatkan deskripsi rinci dari gambar Anda.",
+        featureTranslate: "<strong>Terjemahkan Teks:</strong> Terjemahkan teks di dalam gambar ke berbagai bahasa.",
+        featureExport: "<strong>Edit & Ekspor:</strong> Edit hasil dan unduh sebagai TXT, DOC, atau PDF.",
+        howToUse: "Cara Menggunakan",
+        stepUpload: "<strong>Unggah Gambar:</strong> Pilih satu atau beberapa file gambar untuk memulai.",
+        stepChooseTask: "<strong>Pilih Tugas:</strong> Pilih dari mengekstrak teks, mendeskripsikan, atau menerjemahkan.",
+        stepReview: "<strong>Tinjau & Edit:</strong> Hasil yang dihasilkan AI akan muncul. Lakukan pengeditan apa pun yang Anda butuhkan.",
+        stepDownload: "<strong>Unduh:</strong> Simpan pekerjaan Anda dalam format yang Anda inginkan.",
+        // Image Uploader
+        uploaderTitle: "Seret & Lepas atau Klik untuk Mengunggah",
+        uploaderSubtitleMultiple: "Pilih satu atau beberapa file gambar (PNG, JPG, WEBP).",
+        // Task Selector
+        taskSelectorTitle: "Pilih Tugas",
+        taskSelectorSubtitle: (count) => `Apa yang ingin Anda lakukan dengan ${count} gambar ini?`,
+        taskExtract: "Ekstrak Teks",
+        taskDescribe: "Deskripsikan Gambar",
+        taskTranslate: "Terjemahkan Teks dalam Gambar",
+        translateToAction: "Terjemahkan ke:",
+        translateButton: "Terjemahkan",
+        cancelTaskSelection: "Pilih gambar yang berbeda",
+        imageAlt: (index) => `Dipilih untuk diproses ${index + 1}`,
+        // Processing View
+        processingMessage: (count, task) => `Memproses ${count} gambar: ${task}...`,
+        analyzing: "Menganalisis...",
+        aiWorking: "Kecerdasan buatan sedang mengerjakan permintaan Anda.",
+        // Result View
+        resultTitle: "Hasil",
+        resultTitleExtract: "Teks yang Diekstrak (Dapat Diedit)",
+        resultTitleDescribe: "Deskripsi Gambar (Dapat Diedit)",
+        resultTitleTranslate: "Teks yang Diterjemahkan (Dapat Diedit)",
+        resultTitleDefault: "Hasil (Dapat Diedit)",
+        itemsCount: (count) => `(${count} item)`,
+        startOverButton: "Mulai Lagi",
+        downloadLabel: "Unduh:",
+        resultPlaceholder: "Hasil...",
+        processedAlt: "Konten yang diproses",
+        // Error View
+        errorProcessingFailed: "Pemrosesan Gagal",
+        unknownError: "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi nanti.",
+        tryAgainButton: "Coba Lagi",
+        apiKeyPrompt: "Sebagai alternatif, jika Anda memiliki kunci API sendiri, Anda dapat memasukkannya di bawah ini untuk melanjutkan.",
+        apiKeyInputPlaceholder: "Masukkan Kunci API Anda",
+        apiKeySubmitButton: "Coba Lagi dengan Kunci Saya",
+        // Footer
+        footerText: "Didukung oleh Generative AI",
+        // Misc
+        popupBlocked: "Iklan popup mungkin telah diblokir oleh browser.",
+        popupError: "Terjadi kesalahan saat mencoba membuka iklan popup:",
+        pdfError: "Gagal membuat PDF. Harap pastikan pustaka jsPDF dimuat dengan benar.",
+    }
+};
+// === END: localization/translations.ts ===
+
+// === START: contexts/LocalizationContext.tsx ===
+const LanguageContext = createContext(null);
+const LanguageProvider = ({ children }) => {
+    const [language, setLanguage] = useState('en');
+    const t = translations[language];
+    const toggleLanguage = () => {
+        setLanguage(prev => (prev === 'en' ? 'id' : 'en'));
+    };
+    return (React.createElement(LanguageContext.Provider, { value: { language, toggleLanguage, t } }, children));
+};
+const useLocalization = () => {
+    const context = useContext(LanguageContext);
+    if (!context) {
+        throw new Error('useLocalization must be used within a LanguageProvider');
+    }
+    return context;
+};
+// === END: contexts/LocalizationContext.tsx ===
+
+// === START: utils/fileUtils.ts ===
+// FIX: [Line 581] Added explicit promise return type to fix type inference issues for the awaited result.
+const fileToBase64 = (file: File): Promise<{ base64: string, mimeType: string }> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+            const result = reader.result;
+            if (typeof result === 'string') {
+                const base64 = result.split(',')[1];
+                resolve({ base64, mimeType: file.type });
+            } else {
+                reject(new Error('Failed to read file as a data URL string.'));
+            }
+        };
+        reader.onerror = (error) => reject(error);
+    });
+};
+const createDownloadLink = (blob, fileName) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
+const downloadTxt = (text) => {
+    const blob = new Blob([text], { type: 'text/plain' });
+    createDownloadLink(blob, 'document.txt');
+};
+const downloadDoc = (text) => {
+    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' " +
+        "xmlns:w='urn:schemas-microsoft-com:office:word' " +
+        "xmlns='http://www.w3.org/TR/REC-html40'>" +
+        "<head><meta charset='utf-8'><title>Export HTML to Word Document</title></head><body>";
+    const footer = "</body></html>";
+    const sourceHTML = header + text.replace(/\n/g, '<br/>') + footer;
+    const blob = new Blob([sourceHTML], { type: 'application/msword' });
+    createDownloadLink(blob, 'document.doc');
+};
+const downloadPdf = (text, alertMessage) => {
+    try {
+        // FIX: [Line 215] Cast window to any to access jspdf property, which is added by an external script.
+        const { jsPDF } = (window as any).jspdf;
+        const doc = new jsPDF();
+        const lines = doc.splitTextToSize(text, 180);
+        doc.text(lines, 10, 10);
+        doc.save('document.pdf');
+    }
+    catch (e) {
+        alert(alertMessage);
+        console.error(e);
+    }
+};
+// === END: utils/fileUtils.ts ===
+
+
+// === START: services/geminiService.ts ===
+const getAiClient = (apiKey) => {
+    if (!apiKey) {
+        // FIX: Cast window to any to access process.env, which may be injected by a bundler.
+        const envApiKey = (window as any).process?.env?.API_KEY;
+        if (!envApiKey) {
+            console.error("API_KEY is not configured.");
+            return null;
+        }
+        apiKey = envApiKey;
+    }
+    return new GoogleGenAI({ apiKey });
+};
+async function processImageWithAI(base64Image, mimeType, prompt, apiKey) {
+    const ai = getAiClient(apiKey);
+    if (!ai) {
+        throw new Error("The AI service is not configured. Please contact the site administrator or provide an API key.");
+    }
+    try {
+        const imagePart = {
+            inlineData: {
+                mimeType: mimeType,
+                data: base64Image,
+            },
+        };
+        const textPart = {
+            text: prompt,
+        };
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [imagePart, textPart] }
+        });
+        return response.text;
+    }
+    catch (error) {
+        console.error("Error calling AI service:", error);
+        // FIX: [Line 323] Add type guard to check if error is an instance of Error before accessing message property.
+        if (error instanceof Error && error.message && (error.message.toLowerCase().includes('api key not valid') || error.message.toLowerCase().includes('permission denied'))) {
+            throw new Error("The provided API key is invalid or lacks permissions.");
+        }
+        throw error;
+    }
+}
+// === END: services/geminiService.ts ===
+
+// === START: components/Icons.tsx ===
+const LogoIcon = ({ className }) => (React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", className: className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 1.5, "aria-labelledby": "logoTitle" },
+    React.createElement("title", { id: "logoTitle" }, "Image to Doc Logo"),
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" }),
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M8 10l2-2 2 2 2.5-2.5" }),
+    React.createElement("circle", { cx: "15.5", cy: "8", r: "1.5" }),
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M5 13h14" }),
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M8 15.5h8M8 18h5" })));
+const UploadIcon = ({ className }) => (React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", className: className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2 },
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" })));
+const TxtIcon = ({ className }) => (React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", className: className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2 },
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" })));
+const DocIcon = ({ className }) => (React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", className: className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2 },
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" })));
+const PdfIcon = ({ className }) => (React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", className: className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2 },
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" })));
+const DescriptionIcon = ({ className }) => (React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", className: className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2 },
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M4 6h16M4 12h16M4 18h7" })));
+const TranslateIcon = ({ className }) => (React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", className: className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2 },
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M3 5h12M9 3v2m1.06 7.16l-1.06-1.06-1.06 1.06M9 16.5V12m0 0a3 3 0 013 3m-3-3a3 3 0 00-3 3m-3.75 3h17.5a2.25 2.25 0 002.25-2.25v-13.5A2.25 2.25 0 0019.25 2H4.75A2.25 2.25 0 002.5 4.25v13.5A2.25 2.25 0 004.75 20z" })));
+const CloseIcon = ({ className }) => (React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", className: className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2 },
+    React.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M6 18L18 6M6 6l12 12" })));
+// === END: components/Icons.tsx ===
+
+// === START: components/Loader.tsx ===
+const Loader = () => {
+    return (React.createElement("div", { className: "flex justify-center items-center" },
+        React.createElement("svg", { className: "animate-spin h-12 w-12 text-sky-400", xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24" },
+            React.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }),
+            React.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" }))));
+};
+// === END: components/Loader.tsx ===
+
+// === START: components/ImageUploader.tsx ===
+const ImageUploader = ({ onImageSelect }) => {
+    const { t } = useLocalization();
+    const fileInputRef = useRef(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const handleFileChange = (event) => {
+        const files = event.target.files;
+        if (files && files.length > 0) {
+            onImageSelect(Array.from(files));
+        }
+    };
+    const handleDrop = useCallback((event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragging(false);
+        const files = event.dataTransfer.files;
+        if (files && files.length > 0) {
+            const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+            if (imageFiles.length > 0) {
+                onImageSelect(imageFiles);
+            }
+        }
+    }, [onImageSelect]);
+    const handleDragOver = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragging(true);
+    };
+    const handleDragLeave = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragging(false);
+    };
+    const handleClick = () => {
+        fileInputRef.current?.click();
+    };
+    return (React.createElement("div", { onClick: handleClick, onDrop: handleDrop, onDragOver: handleDragOver, onDragLeave: handleDragLeave, className: `group w-full max-w-2xl p-8 sm:p-12 border-4 border-dashed rounded-2xl cursor-pointer transition-all duration-300 bg-white/40 backdrop-blur-lg shadow-lg
+      ${isDragging
+            ? 'border-fuchsia-500 bg-fuchsia-500/10 scale-105 shadow-2xl shadow-fuchsia-500/20'
+            : 'border-slate-400/50 hover:border-fuchsia-400 hover:bg-white/60'
+        }` },
+        React.createElement("input", { type: "file", ref: fileInputRef, onChange: handleFileChange, className: "hidden", accept: "image/png, image/jpeg, image/webp", multiple: true }),
+        React.createElement("div", { className: "flex flex-col items-center justify-center text-center" },
+            React.createElement(UploadIcon, { className: "w-16 h-16 text-slate-500 mb-4 transition-transform duration-300 group-hover:text-fuchsia-500 group-hover:scale-110" }),
+            React.createElement("p", { className: "text-xl font-semibold text-slate-700" }, t.uploaderTitle),
+            React.createElement("p", { className: "text-slate-500 mt-2" }, t.uploaderSubtitleMultiple))));
+};
+// === END: components/ImageUploader.tsx ===
+
+// === START: components/ApiKeyInput.tsx ===
+const ApiKeyInput = ({ onSubmit }) => {
+    const { t } = useLocalization();
+    const [apiKey, setApiKey] = useState('');
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (apiKey.trim()) {
+            onSubmit(apiKey.trim());
+        }
+    };
+    return (React.createElement("form", { onSubmit: handleSubmit, className: "mt-4 w-full max-w-md mx-auto" },
+        React.createElement("p", { className: "text-sm text-slate-600 mb-2" }, t.apiKeyPrompt),
+        React.createElement("div", { className: "flex items-center gap-2" },
+            React.createElement("input", { type: "password", value: apiKey, onChange: (e) => setApiKey(e.target.value), placeholder: t.apiKeyInputPlaceholder, className: "flex-grow px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors" }),
+            React.createElement("button", { type: "submit", className: "px-4 py-2 bg-fuchsia-500 text-white font-semibold rounded-lg hover:bg-fuchsia-600 transition-colors disabled:opacity-50", disabled: !apiKey.trim() }, t.apiKeySubmitButton))));
+};
+// === END: components/ApiKeyInput.tsx ===
+
+// === START: components/ResultView.tsx ===
+const ResultItem = ({ result, onTextChange }) => {
+    const { t } = useLocalization();
+    const triggerAd = () => {
+        try {
+            const adWindow = window.open('https://niecesprivilegelimelight.com/x1vnqmu9?key=7abbf635479d3bf5a80581864c104b74', '_blank');
+            if (!adWindow || adWindow.closed || typeof adWindow.closed === 'undefined') {
+                console.warn(t.popupBlocked);
+            }
+        }
+        catch (error) {
+            console.error(t.popupError, error);
+        }
+    };
+    return (React.createElement("div", { className: "bg-white/50 backdrop-blur-md border border-white/30 p-4 rounded-xl flex flex-col md:flex-row gap-4 shadow-md" },
+        React.createElement("div", { className: "md:w-1/3 flex-shrink-0" },
+            React.createElement("img", { src: result.imageUrl, alt: t.processedAlt, className: "object-contain w-full h-full max-h-48 md:max-h-full rounded-lg bg-black/5" })),
+        React.createElement("div", { className: "flex-grow flex flex-col" },
+            // FIX: [Line 392] Changed `value` to `defaultValue` to fix TypeScript error. In this React setup, this is functionally equivalent for a controlled component that triggers re-renders on change.
+            React.createElement("textarea", { defaultValue: result.text, onChange: (e) => onTextChange(e.target.value), className: "w-full flex-grow bg-white/60 border-2 border-slate-300 rounded-lg p-3 text-slate-800 focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors placeholder:text-slate-500" }),
+            React.createElement("div", { className: "mt-3 flex items-center gap-2" },
+                React.createElement("span", { className: "font-semibold text-sm text-slate-600" }, t.downloadLabel),
+                React.createElement("button", { onClick: () => { triggerAd(); downloadTxt(result.text); }, className: "download-button border-green-500 text-green-600 hover:bg-green-500 hover:text-white" },
+                    React.createElement(TxtIcon, { className: "w-4 h-4" }),
+                    " .TXT"),
+                React.createElement("button", { onClick: () => { triggerAd(); downloadDoc(result.text); }, className: "download-button border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white" },
+                    React.createElement(DocIcon, { className: "w-4 h-4" }),
+                    " .DOC"),
+                React.createElement("button", { onClick: () => { triggerAd(); downloadPdf(result.text, t.pdfError); }, className: "download-button border-red-500 text-red-600 hover:bg-red-500 hover:text-white" },
+                    React.createElement(PdfIcon, { className: "w-4 h-4" }),
+                    " .PDF")))));
+};
+const ResultView = ({ results, onTextChange, onReset, title }) => {
+    const { t } = useLocalization();
+    return (React.createElement("div", { className: "w-full h-full bg-white/40 backdrop-blur-lg border border-white/20 p-4 sm:p-6 rounded-2xl shadow-2xl flex flex-col" },
+        React.createElement("div", { className: "flex-shrink-0 mb-4 flex justify-between items-center" },
+            React.createElement("h3", { className: "text-xl font-semibold text-fuchsia-600" },
+                title,
+                " ",
+                t.itemsCount(results.length)),
+            React.createElement("button", { onClick: onReset, className: "px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.startOverButton)),
+        React.createElement("div", { className: "flex-grow overflow-y-auto space-y-4 pr-2" }, results.map((result) => (React.createElement(ResultItem, { key: result.id, result: result, onTextChange: (newText) => onTextChange(result.id, newText) })))),
+        React.createElement("style", null, `
+          .download-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s ease-in-out;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transform-origin: center;
+            border-width: 1px;
+            background-color: transparent;
+          }
+          .download-button:hover {
+            transform: scale(1.05);
+          }
+      `)));
+};
+// === END: components/ResultView.tsx ===
+
+// === START: components/TaskSelector.tsx ===
+const TaskSelector = ({ imageUrls, onSelectTask, onCancel, onRemoveImage }) => {
+    const { t } = useLocalization();
+    const LANGUAGES = [
+        { code: 'en', name: 'English' },
+        { code: 'es', name: 'Spanish' },
+        { code: 'fr', name: 'French' },
+        { code: 'de', name: 'German' },
+        { code: 'ja', name: 'Japanese' },
+        { code: 'id', name: 'Indonesian' },
+        { code: 'ru', name: 'Russian' },
+        { code: 'zh', name: 'Chinese' },
+    ];
+    const [language, setLanguage] = useState(LANGUAGES[0].code);
+    const triggerAd = () => {
+        try {
+            const adWindow = window.open('https://niecesprivilegelimelight.com/x1vnqmu9?key=7abbf635479d3bf5a80581864c104b74', '_blank');
+            if (!adWindow || adWindow.closed || typeof adWindow.closed === 'undefined') {
+                console.warn(t.popupBlocked);
+            }
+        }
+        catch (error) {
+            console.error(t.popupError, error);
+        }
+    };
+    return (React.createElement("div", { className: "w-full max-w-4xl text-center bg-white/40 backdrop-blur-lg border border-white/20 p-6 sm:p-8 rounded-2xl shadow-2xl" },
+        React.createElement("h2", { className: "text-2xl sm:text-3xl font-bold text-sky-700 mb-4" }, t.taskSelectorTitle),
+        React.createElement("p", { className: "text-slate-600 mb-6" }, t.taskSelectorSubtitle(imageUrls.length)),
+        React.createElement("div", { className: "mb-8 p-4 bg-black/5 rounded-lg overflow-hidden" },
+            React.createElement("div", { className: "flex overflow-x-auto space-x-4" }, imageUrls.map((url, index) => (React.createElement("div", { key: url, className: "relative flex-shrink-0" },
+                React.createElement("img", { src: url, alt: t.imageAlt(index), className: "h-48 rounded-md object-contain bg-black/10" }),
+                React.createElement("button", { onClick: () => onRemoveImage(index), className: "absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/80 transition-colors focus:outline-none focus:ring-2 focus:ring-white", "aria-label": `Remove image ${index + 1}` },
+                    React.createElement(CloseIcon, { className: "w-4 h-4" }))))))),
+        React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4" },
+            React.createElement("button", { onClick: () => { triggerAd(); onSelectTask(Task.EXTRACT_TEXT); }, className: "task-button" },
+                React.createElement(TxtIcon, { className: "w-8 h-8 mb-2" }),
+                React.createElement("span", null, t.taskExtract)),
+            React.createElement("button", { onClick: () => { triggerAd(); onSelectTask(Task.DESCRIBE_IMAGE); }, className: "task-button" },
+                React.createElement(DescriptionIcon, { className: "w-8 h-8 mb-2" }),
+                React.createElement("span", null, t.taskDescribe)),
+            React.createElement("div", { className: "md:col-span-2 p-4 bg-white/30 backdrop-blur-sm border border-white/20 rounded-lg flex flex-col sm:flex-row items-center justify-center gap-4" },
+                React.createElement(TranslateIcon, { className: "w-8 h-8 text-sky-600" }),
+                React.createElement("span", { className: "font-semibold text-slate-700" },
+                    t.taskTranslate,
+                    " ",
+                    t.translateToAction),
+                // FIX: [Line 483] Changed `value` to `defaultValue` to fix TypeScript error. In this React setup, this is functionally equivalent for a controlled component that triggers re-renders on change.
+                React.createElement("select", { defaultValue: language, onChange: (e) => setLanguage(e.target.value), className: "bg-white/70 border border-slate-400/50 rounded-md px-3 py-2 text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500", "aria-label": "Select language for translation" }, LANGUAGES.map(lang => (React.createElement("option", { key: lang.code, value: lang.code }, lang.name)))),
+                React.createElement("button", { onClick: () => { triggerAd(); onSelectTask(Task.TRANSLATE, language); }, className: "px-5 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.translateButton))),
+        React.createElement("div", { className: "mt-8" },
+            React.createElement("button", { onClick: onCancel, className: "text-slate-500 hover:text-fuchsia-600 transition-colors font-medium" }, t.cancelTaskSelection)),
+        React.createElement("style", null, `
+                .task-button {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 1.5rem;
+                    background-color: rgba(255, 255, 255, 0.5);
+                    border-radius: 0.75rem;
+                    transition: all 0.2s ease-in-out;
+                    font-weight: 600;
+                    color: #334155; /* slate-700 */
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                }
+                .task-button:hover {
+                    color: #ffffff;
+                    transform: translateY(-5px);
+                    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+                    background-image: linear-gradient(to right, var(--tw-gradient-stops));
+                    --tw-gradient-from: #0ea5e9; /* sky-500 */
+                    --tw-gradient-to: #d946ef;   /* fuchsia-500 */
+                    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+                }
+            `)));
+};
+// === END: components/TaskSelector.tsx ===
+
+// === START: components/LanguageSwitcher.tsx ===
+const LanguageSwitcher = () => {
+    const { language, toggleLanguage } = useLocalization();
+    return (React.createElement("div", { className: "absolute top-4 right-4" },
+        React.createElement("button", { onClick: toggleLanguage, className: "px-4 py-2 bg-white/50 backdrop-blur-md border border-white/30 rounded-lg text-sm font-semibold text-slate-700 hover:bg-white/70 transition-colors shadow-sm" },
+            language === 'en' ? 'ID' : 'EN')));
+};
+// === END: components/LanguageSwitcher.tsx ===
+
+// === START: App.tsx ===
+const AdComponent = () => {
+    const { t } = useLocalization();
+    const adRef = useRef(null);
+    useEffect(() => {
+        const adContainer = adRef.current;
+        if (adContainer && adContainer.children.length === 0) {
+            const container = document.createElement('div');
+            container.id = 'container-10f9d35bcba536c63afb32dc4a986c0d';
+            const script = document.createElement('script');
+            script.async = true;
+            script.setAttribute('data-cfasync', 'false');
+            script.src = '//niecesprivilegelimelight.com/10f9d35bcba536c63afb32dc4a986c0d/invoke.js';
+            script.onerror = () => {
+                if (adContainer) {
+                    adContainer.innerHTML = `<div class="text-center text-slate-500 text-sm p-4">${t.adError}</div>`;
+                }
+            };
+            adContainer.appendChild(container);
+            adContainer.appendChild(script);
+        }
+    }, [t]);
+    return (React.createElement("div", { className: "my-6 w-full max-w-5xl mx-auto flex justify-center items-center", ref: adRef, style: { minHeight: '90px' } }));
+};
+const App = () => {
+    const { t } = useLocalization();
+    const [appState, setAppState] = useState(AppState.IDLE);
+    const [imageFiles, setImageFiles] = useState([]);
+    const [imageUrls, setImageUrls] = useState([]);
+    const [results, setResults] = useState([]);
+    const [error, setError] = useState(null);
+    const [currentTask, setCurrentTask] = useState(null);
+    const [currentTaskParams, setCurrentTaskParams] = useState(null);
+    const userApiKeyRef = useRef(null);
+
+    const handleTaskSelect = useCallback(async (task, language, apiKey) => {
+        if (imageFiles.length === 0)
+            return;
+        setCurrentTask(task);
+        setCurrentTaskParams({ language });
+        setAppState(AppState.PROCESSING);
+        setError(null);
+        let prompt = '';
+        switch (task) {
+            case Task.EXTRACT_TEXT:
+                prompt = "You are an expert OCR system. Extract all text from this image. Preserve the original layout, including columns, indentation, spacing, and line breaks, as accurately as possible. The goal is for the text output to visually match the text layout in the image.";
+                break;
+            case Task.DESCRIBE_IMAGE:
+                prompt = "Describe this image in detail. What are the main subjects, what is the setting, and what is the overall mood?";
+                break;
+            case Task.TRANSLATE:
+                const languageName = language ? new Intl.DisplayNames(['en'], { type: 'language' }).of(language) : 'the selected language';
+                prompt = `First, extract all text from this image. Then, translate the extracted text into ${languageName}. Only return the translated text.`;
+                break;
+        }
+        try {
+            const processingPromises = imageFiles.map(async (file) => {
+                const { base64, mimeType } = await fileToBase64(file);
+                const text = await processImageWithAI(base64, mimeType, prompt, apiKey || userApiKeyRef.current);
+                return text;
+            });
+            const processedTexts = await Promise.all(processingPromises);
+            const newResults = imageUrls.map((url, index) => ({
+                id: url,
+                imageUrl: url,
+                text: processedTexts[index] || '',
+            }));
+            setResults(newResults);
+            setAppState(AppState.SUCCESS);
+            userApiKeyRef.current = null; // Clear user API key on success
+        }
+        catch (err) {
+            console.error(err);
+            setError({
+                title: t.errorProcessingFailed,
+                message: err instanceof Error ? err.message : t.unknownError,
+            });
+            setAppState(AppState.ERROR);
+        }
+    }, [imageFiles, imageUrls, t]);
+    const handleImageSelect = useCallback((files) => {
+        const urls = files.map(file => URL.createObjectURL(file));
+        setImageFiles(files);
+        setImageUrls(urls);
+        setAppState(AppState.TASK_SELECTION);
+    }, []);
+    const handleReset = useCallback(() => {
+        setAppState(AppState.IDLE);
+        setImageFiles([]);
+        setResults([]);
+        setError(null);
+        setCurrentTask(null);
+        setCurrentTaskParams(null);
+        userApiKeyRef.current = null;
+        if (imageUrls.length > 0) {
+            imageUrls.forEach(url => URL.revokeObjectURL(url));
+            setImageUrls([]);
+        }
+    }, [imageUrls]);
+    const handleRetryWithUserKey = (apiKey) => {
+        userApiKeyRef.current = apiKey;
+        if (currentTask && currentTaskParams) {
+            handleTaskSelect(currentTask, currentTaskParams.language, apiKey);
+        }
+    };
+    const handleRemoveImage = useCallback((indexToRemove) => {
+        const newImageFiles = imageFiles.filter((_, index) => index !== indexToRemove);
+        const newImageUrls = imageUrls.filter((_, index) => index !== indexToRemove);
+        if (newImageFiles.length === 0) {
+            handleReset();
+        }
+        else {
+            URL.revokeObjectURL(imageUrls[indexToRemove]); // Free up memory for the removed image
+            setImageFiles(newImageFiles);
+            setImageUrls(newImageUrls);
+        }
+    }, [imageFiles, imageUrls, handleReset]);
+    const handleResultTextChange = (id, newText) => {
+        setResults(prevResults => prevResults.map(result => result.id === id ? { ...result, text: newText } : result));
+    };
+    const getResultTitle = () => {
+        if (!currentTask)
+            return t.resultTitle;
+        switch (currentTask) {
+            case Task.EXTRACT_TEXT:
+                return t.resultTitleExtract;
+            case Task.DESCRIBE_IMAGE:
+                return t.resultTitleDescribe;
+            case Task.TRANSLATE:
+                return t.resultTitleTranslate;
+            default:
+                return t.resultTitleDefault;
+        }
+    };
+    const renderContent = () => {
+        switch (appState) {
+            case AppState.TASK_SELECTION:
+                return (imageUrls.length > 0 && React.createElement(TaskSelector, { imageUrls: imageUrls, onSelectTask: handleTaskSelect, onCancel: handleReset, onRemoveImage: handleRemoveImage }));
+            case AppState.PROCESSING:
+                return (React.createElement("div", { className: "text-center bg-white/40 backdrop-blur-lg border border-white/20 p-8 rounded-2xl shadow-lg" },
+                    React.createElement("h2", { className: "text-2xl font-semibold mb-4 text-fuchsia-600" }, currentTask ? t.processingMessage(imageFiles.length, currentTask) : t.analyzing),
+                    React.createElement("div", { className: "flex flex-wrap justify-center gap-4 max-h-64 overflow-y-auto p-2 bg-black/5 rounded-lg" }, imageUrls.map(url => React.createElement("img", { key: url, src: url, alt: "Preview", className: "h-24 rounded-lg shadow-md" }))),
+                    React.createElement(Loader, null),
+                    React.createElement("p", { className: "text-slate-600 mt-4 animate-pulse" }, t.aiWorking)));
+            case AppState.SUCCESS:
+                return (React.createElement(ResultView, { results: results, onTextChange: handleResultTextChange, onReset: handleReset, title: getResultTitle() }));
+            case AppState.ERROR:
+                return (React.createElement("div", { className: "text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl" },
+                    React.createElement("h2", { className: "text-2xl font-semibold mb-4 text-red-600" }, (error === null || error === void 0 ? void 0 : error.title) || t.errorProcessingFailed),
+                    React.createElement("p", { className: "text-slate-700 mb-6" }, (error === null || error === void 0 ? void 0 : error.message) || t.unknownError),
+                    React.createElement("button", { onClick: handleReset, className: "px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.tryAgainButton),
+                    React.createElement(ApiKeyInput, { onSubmit: handleRetryWithUserKey })));
+            case AppState.IDLE:
+            default:
+                return (React.createElement(ImageUploader, { onImageSelect: handleImageSelect }));
+        }
+    };
+    return (React.createElement("div", { className: "min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 relative" },
+        React.createElement(LanguageSwitcher, null),
+        React.createElement("header", { className: "w-full max-w-5xl mx-auto text-center mb-8" },
+            React.createElement("div", { className: "flex justify-center items-center gap-x-3 sm:gap-x-4" },
+                React.createElement(LogoIcon, { className: "w-10 h-10 sm:w-12 sm:h-12 text-sky-500" }),
+                React.createElement("h1", { className: "text-4xl sm:text-5xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-600 via-purple-600 to-sky-500 font-orbitron" }, t.appTitle)),
+            React.createElement("p", { className: "mt-4 text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-sky-600 to-fuchsia-600" }, t.appSubtitle)),
+        React.createElement(AdComponent, null),
+        React.createElement("main", { className: "w-full max-w-5xl mx-auto flex-grow flex items-center justify-center" }, renderContent()),
+        appState === AppState.IDLE && (React.createElement("section", { className: "w-full max-w-5xl mx-auto mt-8 mb-10 px-4" },
+            React.createElement("div", { className: "bg-white/40 backdrop-blur-lg border border-white/20 rounded-2xl p-6 sm:p-8 shadow-lg" },
+                React.createElement("h2", { className: "text-2xl font-bold text-sky-700 mb-4" }, t.companionTitle),
+                React.createElement("p", { className: "text-slate-700 mb-6" }, t.companionDescription),
+                React.createElement("div", { className: "grid md:grid-cols-2 gap-x-8 gap-y-6" },
+                    React.createElement("div", null,
+                        React.createElement("h3", { className: "text-xl font-semibold text-sky-600 mb-2" }, t.keyFeatures),
+                        React.createElement("ul", { className: "list-disc list-inside text-slate-600 space-y-1" },
+                            React.createElement("li", { dangerouslySetInnerHTML: { __html: t.featureExtract } }),
+                            React.createElement("li", { dangerouslySetInnerHTML: { __html: t.featureDescribe } }),
+                            React.createElement("li", { dangerouslySetInnerHTML: { __html: t.featureTranslate } }),
+                            React.createElement("li", { dangerouslySetInnerHTML: { __html: t.featureExport } }))),
+                    React.createElement("div", null,
+                        React.createElement("h3", { className: "text-xl font-semibold text-sky-600 mb-2" }, t.howToUse),
+                        React.createElement("ol", { className: "list-decimal list-inside text-slate-600 space-y-1" },
+                            React.createElement("li", { dangerouslySetInnerHTML: { __html: t.stepUpload } }),
+                            React.createElement("li", { dangerouslySetInnerHTML: { __html: t.stepChooseTask } }),
+                            React.createElement("li", { dangerouslySetInnerHTML: { __html: t.stepReview } }),
+                            React.createElement("li", { dangerouslySetInnerHTML: { __html: t.stepDownload } }))))))),
+        React.createElement("footer", { className: "w-full text-center p-4 mt-8 text-slate-500" }, t.footerText)));
+};
+// === END: App.tsx ===
+
+// === START: index.tsx ===
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+    throw new Error("Could not find root element to mount to");
+}
+const root = ReactDOM.createRoot(rootElement);
+root.render(React.createElement(React.StrictMode, null,
+    React.createElement(LanguageProvider, null,
+        React.createElement(App, null))));
+// === END: index.tsx ===
