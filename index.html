@@ -148,6 +148,8 @@ const translations = {
         processedAlt: "Processed content",
         // Error View
         errorProcessingFailed: "Processing Failed",
+        apiKeyMissingError: "API_KEY is not configured. Please ensure the API_KEY environment variable is set in your hosting environment.",
+        unknownError: "An unknown error occurred. Please try again later.",
         tryAgainButton: "Try Again",
         // Footer
         footerText: "Powered by Generative AI",
@@ -203,6 +205,8 @@ const translations = {
         processedAlt: "Konten yang diproses",
         // Error View
         errorProcessingFailed: "Pemrosesan Gagal",
+        apiKeyMissingError: "API_KEY tidak dikonfigurasi. Harap pastikan variabel lingkungan API_KEY diatur di lingkungan hosting Anda.",
+        unknownError: "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi nanti.",
         tryAgainButton: "Coba Lagi",
         // Footer
         footerText: "Didukung oleh Generative AI",
@@ -627,9 +631,17 @@ const App = () => {
         }
         catch (err) {
             console.error(err);
+            let message = t.unknownError;
+            if (err instanceof Error) {
+                if (err.message.includes("API_KEY is not configured")) {
+                    message = t.apiKeyMissingError;
+                } else {
+                    message = err.message;
+                }
+            }
             setError({
                 title: t.errorProcessingFailed,
-                message: err instanceof Error ? err.message : 'An unknown error occurred.'
+                message: message
             });
             setAppState(AppState.ERROR);
         }
@@ -683,7 +695,7 @@ const App = () => {
             case AppState.ERROR:
                 return (React.createElement("div", { className: "text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl" },
                     React.createElement("h2", { className: "text-2xl font-semibold mb-4 text-red-600" }, (error === null || error === void 0 ? void 0 : error.title) || t.errorProcessingFailed),
-                    React.createElement("p", { className: "text-slate-700 mb-6" }, (error === null || error === void 0 ? void 0 : error.message) || 'An unknown error occurred.'),
+                    React.createElement("p", { className: "text-slate-700 mb-6" }, (error === null || error === void 0 ? void 0 : error.message) || t.unknownError),
                     React.createElement("button", { onClick: handleReset, className: "px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.tryAgainButton)));
             case AppState.IDLE:
             default:
