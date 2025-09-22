@@ -9,6 +9,11 @@ import { processImageWithAI, MISSING_API_KEY_ERROR, INVALID_API_KEY_ERROR } from
 import { fileToBase64 } from './utils/fileUtils.ts';
 import { LogoIcon } from './components/Icons.tsx';
 
+type AppError = {
+  title: string;
+  message: string;
+}
+
 const AdComponent: React.FC = () => {
   const adRef = useRef<HTMLDivElement>(null);
   
@@ -45,7 +50,7 @@ const App: React.FC = () => {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [results, setResults] = useState<ProcessedResult[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
 
   const handleTaskSelect = useCallback(async (task: Task, language?: string) => {
@@ -88,14 +93,20 @@ const App: React.FC = () => {
       setAppState(AppState.SUCCESS);
     } catch (err) {
       console.error(err);
-      let errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       
-      // Berikan pesan yang lebih ramah pengguna untuk kesalahan terkait API
       if (errorMessage === MISSING_API_KEY_ERROR || errorMessage === INVALID_API_KEY_ERROR) {
-        errorMessage = "Gagal memproses permintaan. Kunci API aplikasi mungkin hilang atau tidak valid.";
+        setError({
+          title: "Masalah Konfigurasi Kunci API",
+          message: "Aplikasi ini sepertinya belum dikonfigurasi dengan Kunci API Google. Harap pastikan variabel lingkungan `API_KEY` telah diatur dengan benar di platform hosting Anda (misalnya Netlify, Vercel) dan lakukan deploy ulang."
+        });
+      } else {
+        setError({
+          title: "Pemrosesan Gagal",
+          message: errorMessage
+        });
       }
       
-      setError(errorMessage);
       setAppState(AppState.ERROR);
     }
   }, [imageFiles, imageUrls]);
@@ -172,8 +183,8 @@ const App: React.FC = () => {
       case AppState.ERROR:
         return (
           <div className="text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl">
-            <h2 className="text-2xl font-semibold mb-4 text-red-600">Processing Failed</h2>
-            <p className="text-slate-700 mb-6">{error}</p>
+            <h2 className="text-2xl font-semibold mb-4 text-red-600">{error?.title || 'Processing Failed'}</h2>
+            <p className="text-slate-700 mb-6">{error?.message || 'An unknown error occurred.'}</p>
             <button
               onClick={handleReset}
               className="px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md"
