@@ -67,13 +67,6 @@
 </head>
   <body class="bg-gradient-to-br from-purple-100 via-blue-100 to-cyan-100 text-slate-800">
     <div id="root"></div>
-    <script>
-      // Polyfill process.env untuk lingkungan browser untuk mencegah crash.
-      // Layanan Gemini kemudian akan menangani kunci API yang hilang dengan baik.
-      if (typeof process === 'undefined') {
-        window.process = { env: { API_KEY: '' } };
-      }
-    </script>
     <script type="text/babel" data-presets="react,typescript" data-type="module">
 // BUNDLED APPLICATION CODE
 
@@ -149,8 +142,6 @@ const translations = {
         resultPlaceholder: "Result...",
         processedAlt: "Processed content",
         // Error View
-        errorApiKeyTitle: "API Key Configuration Issue",
-        errorApiKeyMessage: "This application does not seem to be configured with a Google API Key. Please ensure the `API_KEY` environment variable is set correctly on your hosting platform (e.g., Netlify, Vercel) and redeploy.",
         errorProcessingFailed: "Processing Failed",
         tryAgainButton: "Try Again",
         // Footer
@@ -206,8 +197,6 @@ const translations = {
         resultPlaceholder: "Hasil...",
         processedAlt: "Konten yang diproses",
         // Error View
-        errorApiKeyTitle: "Masalah Konfigurasi Kunci API",
-        errorApiKeyMessage: "Aplikasi ini sepertinya belum dikonfigurasi dengan Kunci API Google. Harap pastikan variabel lingkungan `API_KEY` telah diatur dengan benar di platform hosting Anda (misalnya Netlify, Vercel) dan lakukan deploy ulang.",
         errorProcessingFailed: "Pemrosesan Gagal",
         tryAgainButton: "Coba Lagi",
         // Footer
@@ -293,33 +282,9 @@ const downloadPdf = (text, alertMessage) => {
 
 
 // === START: services/geminiService.ts ===
-let ai = null;
-const MISSING_API_KEY_ERROR = "MISSING_API_KEY_ERROR";
-const INVALID_API_KEY_ERROR = "INVALID_API_KEY_ERROR";
-const GENERAL_API_ERROR = "GENERAL_API_ERROR";
-function initializeAIClient() {
-    if (ai) {
-        return true;
-    }
-    const key = typeof process !== 'undefined' && process.env ? process.env.API_KEY : '';
-    if (key && key.trim() !== '') {
-        try {
-            ai = new GoogleGenAI({ apiKey: key });
-            return true;
-        }
-        catch (error) {
-            console.error("Failed to initialize GoogleGenAI:", error);
-            ai = null;
-            return false;
-        }
-    }
-    return false;
-}
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
 async function processImageWithAI(base64Image, mimeType, prompt) {
-    if (!initializeAIClient()) {
-        throw new Error(MISSING_API_KEY_ERROR);
-    }
-    const client = ai;
     try {
         const imagePart = {
             inlineData: {
@@ -330,7 +295,7 @@ async function processImageWithAI(base64Image, mimeType, prompt) {
         const textPart = {
             text: prompt,
         };
-        const response = await client.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: { parts: [imagePart, textPart] }
         });
@@ -338,11 +303,8 @@ async function processImageWithAI(base64Image, mimeType, prompt) {
     }
     catch (error) {
         console.error("Error calling AI service:", error);
-        if (error instanceof Error && (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('permission denied'))) {
-            ai = null;
-            throw new Error(INVALID_API_KEY_ERROR);
-        }
-        throw new Error(GENERAL_API_ERROR);
+        // The App component will catch this and display a generic "Processing Failed" message.
+        throw error;
     }
 }
 // === END: services/geminiService.ts ===
@@ -524,7 +486,7 @@ const TaskSelector = ({ imageUrls, onSelectTask, onCancel }) => {
         React.createElement("h2", { className: "text-2xl sm:text-3xl font-bold text-sky-700 mb-4" }, t.taskSelectorTitle),
         React.createElement("p", { className: "text-slate-600 mb-6" }, t.taskSelectorSubtitle(imageUrls.length)),
         React.createElement("div", { className: "mb-8 p-4 bg-black/5 rounded-lg overflow-hidden" },
-            React.createElement("div", { className: "flex overflow-x-auto space-x-4" }, imageUrls.map((url, index) => (React.createElement("img", { key: url, src: url, alt: t.imageAlt(index + 1), className: "flex-shrink-0 h-48 rounded-md object-contain" }))))),
+            React.createElement("div", { className: "flex overflow-x-auto space-x-4" }, imageUrls.map((url, index) => (React.createElement("img", { key: url, src: url, alt: t.imageAlt(index), className: "flex-shrink-0 h-48 rounded-md object-contain" }))))),
         React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4" },
             React.createElement("button", { onClick: () => { triggerAd(); onSelectTask(Task.EXTRACT_TEXT); }, className: "task-button" },
                 React.createElement(TxtIcon, { className: "w-8 h-8 mb-2" }),
@@ -647,19 +609,10 @@ const App = () => {
         }
         catch (err) {
             console.error(err);
-            const errorKey = err instanceof Error ? err.message : GENERAL_API_ERROR;
-            if (errorKey === MISSING_API_KEY_ERROR || errorKey === INVALID_API_KEY_ERROR) {
-                setError({
-                    title: t.errorApiKeyTitle,
-                    message: t.errorApiKeyMessage
-                });
-            }
-            else {
-                setError({
-                    title: t.errorProcessingFailed,
-                    message: err instanceof Error ? err.message : 'An unknown error occurred.'
-                });
-            }
+            setError({
+                title: t.errorProcessingFailed,
+                message: err instanceof Error ? err.message : 'An unknown error occurred.'
+            });
             setAppState(AppState.ERROR);
         }
     }, [imageFiles, imageUrls, t]);
