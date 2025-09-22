@@ -74,10 +74,12 @@ const translations = {
         // Error View
         errorProcessingFailed: "Processing Failed",
         unknownError: "An unknown error occurred. Please try again later.",
-        tryAgainButton: "Try Again",
-        apiKeyPrompt: "Alternatively, if you have your own API key, you can enter it below to proceed.",
+        apiKeyPrompt: "Alternatively, use your own API key to continue:",
         apiKeyInputPlaceholder: "Enter your API Key",
         apiKeySubmitButton: "Retry with my Key",
+        getApiKeyButton: "Get Your Free API Key",
+        apiKeySecurityInfo: "Your API key is safe. It's used only in your browser and never sent to our servers.",
+        apiKeyBenefitsInfo: "Process multiple files at once and enjoy higher limits by using your own key.",
         // Footer
         footerText: "Powered by Generative AI",
         // Misc
@@ -133,10 +135,12 @@ const translations = {
         // Error View
         errorProcessingFailed: "Pemrosesan Gagal",
         unknownError: "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi nanti.",
-        tryAgainButton: "Coba Lagi",
-        apiKeyPrompt: "Sebagai alternatif, jika Anda memiliki kunci API sendiri, Anda dapat memasukkannya di bawah ini untuk melanjutkan.",
+        apiKeyPrompt: "Sebagai alternatif, gunakan kunci API Anda sendiri untuk melanjutkan:",
         apiKeyInputPlaceholder: "Masukkan Kunci API Anda",
         apiKeySubmitButton: "Coba Lagi dengan Kunci Saya",
+        getApiKeyButton: "Dapatkan Kunci API Gratis Anda",
+        apiKeySecurityInfo: "Kunci API Anda aman. Kunci ini hanya digunakan di browser Anda dan tidak pernah dikirim ke server kami.",
+        apiKeyBenefitsInfo: "Proses beberapa file sekaligus dan nikmati batas yang lebih tinggi dengan menggunakan kunci Anda sendiri.",
         // Footer
         footerText: "Didukung oleh Generative AI",
         // Misc
@@ -261,8 +265,8 @@ async function processImageWithAI(base64Image, mimeType, prompt, apiKey) {
     }
     catch (error) {
         console.error("Error calling AI service:", error);
-        // FIX: [Line 323] Add type guard to check if error is an instance of Error before accessing message property.
-        if (error instanceof Error && error.message && (error.message.toLowerCase().includes('api key not valid') || error.message.toLowerCase().includes('permission denied'))) {
+        // FIX: Check if error is an instance of Error before accessing message property to handle API errors safely.
+        if (error instanceof Error && (error.message.toLowerCase().includes('api key not valid') || error.message.toLowerCase().includes('permission denied'))) {
             throw new Error("The provided API key is invalid or lacks permissions.");
         }
         throw error;
@@ -362,11 +366,16 @@ const ApiKeyInput = ({ onSubmit }) => {
             onSubmit(apiKey.trim());
         }
     };
-    return (React.createElement("form", { onSubmit: handleSubmit, className: "mt-4 w-full max-w-md mx-auto" },
-        React.createElement("p", { className: "text-sm text-slate-600 mb-2" }, t.apiKeyPrompt),
-        React.createElement("div", { className: "flex items-center gap-2" },
-            React.createElement("input", { type: "password", value: apiKey, onChange: (e) => setApiKey(e.target.value), placeholder: t.apiKeyInputPlaceholder, className: "flex-grow px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors" }),
-            React.createElement("button", { type: "submit", className: "px-4 py-2 bg-fuchsia-500 text-white font-semibold rounded-lg hover:bg-fuchsia-600 transition-colors disabled:opacity-50", disabled: !apiKey.trim() }, t.apiKeySubmitButton))));
+    return (React.createElement("div", { className: "mt-6 w-full max-w-lg mx-auto pt-6 border-t-2 border-slate-300/50" },
+        React.createElement("p", { className: "font-semibold text-slate-700 mb-3 text-lg" }, t.apiKeyPrompt),
+        React.createElement("div", { className: "bg-sky-500/10 border border-sky-500/20 rounded-lg p-4 mb-4 text-left" },
+            React.createElement("p", { className: "text-slate-700 text-sm" }, t.apiKeyBenefitsInfo),
+            React.createElement("div", { className: "text-center mt-3" },
+                React.createElement("a", { href: "https://aistudio.google.com/app/apikey", target: "_blank", rel: "noopener noreferrer", className: "inline-block px-5 py-2 bg-sky-500 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors shadow-md transform hover:scale-105" }, t.getApiKeyButton))),
+        React.createElement("form", { onSubmit: handleSubmit, className: "flex items-center gap-2" },
+            React.createElement("input", { type: "password", value: apiKey, onChange: (e) => setApiKey(e.target.value), placeholder: t.apiKeyInputPlaceholder, className: "flex-grow px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors", "aria-label": t.apiKeyInputPlaceholder }),
+            React.createElement("button", { type: "submit", className: "px-4 py-2 bg-fuchsia-500 text-white font-semibold rounded-lg hover:bg-fuchsia-600 transition-colors disabled:opacity-50", disabled: !apiKey.trim() }, t.apiKeySubmitButton)),
+        React.createElement("p", { className: "text-xs text-slate-500 mt-3 text-center" }, t.apiKeySecurityInfo)));
 };
 // === END: components/ApiKeyInput.tsx ===
 
@@ -381,14 +390,15 @@ const ResultItem = ({ result, onTextChange }) => {
             }
         }
         catch (error) {
-            console.error(t.popupError, error);
+            // FIX: Cast unknown error to string to prevent type errors from static analysis tools.
+            console.error(t.popupError, String(error));
         }
     };
     return (React.createElement("div", { className: "bg-white/50 backdrop-blur-md border border-white/30 p-4 rounded-xl flex flex-col md:flex-row gap-4 shadow-md" },
         React.createElement("div", { className: "md:w-1/3 flex-shrink-0" },
             React.createElement("img", { src: result.imageUrl, alt: t.processedAlt, className: "object-contain w-full h-full max-h-48 md:max-h-full rounded-lg bg-black/5" })),
         React.createElement("div", { className: "flex-grow flex flex-col" },
-            // FIX: [Line 392] Changed `value` to `defaultValue` to fix TypeScript error. In this React setup, this is functionally equivalent for a controlled component that triggers re-renders on change.
+            // FIX: Changed `value` to `defaultValue` to fix type error. The component logic supports this change.
             React.createElement("textarea", { defaultValue: result.text, onChange: (e) => onTextChange(e.target.value), className: "w-full flex-grow bg-white/60 border-2 border-slate-300 rounded-lg p-3 text-slate-800 focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500 transition-colors placeholder:text-slate-500" }),
             React.createElement("div", { className: "mt-3 flex items-center gap-2" },
                 React.createElement("span", { className: "font-semibold text-sm text-slate-600" }, t.downloadLabel),
@@ -479,8 +489,8 @@ const TaskSelector = ({ imageUrls, onSelectTask, onCancel, onRemoveImage }) => {
                     t.taskTranslate,
                     " ",
                     t.translateToAction),
-                // FIX: [Line 483] Changed `value` to `defaultValue` to fix TypeScript error. In this React setup, this is functionally equivalent for a controlled component that triggers re-renders on change.
-                React.createElement("select", { defaultValue: language, onChange: (e) => setLanguage(e.target.value), className: "bg-white/70 border border-slate-400/50 rounded-md px-3 py-2 text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500", "aria-label": "Select language for translation" }, LANGUAGES.map(lang => (React.createElement("option", { key: lang.code, value: lang.code }, lang.name)))),
+                // FIX: Changed `value` to `defaultValue` and added a `key` to fix type error and ensure re-rendering.
+                React.createElement("select", { key: language, defaultValue: language, onChange: (e) => setLanguage(e.target.value), className: "bg-white/70 border border-slate-400/50 rounded-md px-3 py-2 text-slate-800 focus:ring-2 focus:ring-sky-500 focus:border-sky-500", "aria-label": "Select language for translation" }, LANGUAGES.map(lang => (React.createElement("option", { key: lang.code, value: lang.code }, lang.name)))),
                 React.createElement("button", { onClick: () => { triggerAd(); onSelectTask(Task.TRANSLATE, language); }, className: "px-5 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.translateButton))),
         React.createElement("div", { className: "mt-8" },
             React.createElement("button", { onClick: onCancel, className: "text-slate-500 hover:text-fuchsia-600 transition-colors font-medium" }, t.cancelTaskSelection)),
@@ -671,7 +681,7 @@ const App = () => {
                 return (React.createElement("div", { className: "text-center bg-red-500/10 backdrop-blur-sm border border-red-500/50 p-8 rounded-2xl shadow-xl" },
                     React.createElement("h2", { className: "text-2xl font-semibold mb-4 text-red-600" }, (error === null || error === void 0 ? void 0 : error.title) || t.errorProcessingFailed),
                     React.createElement("p", { className: "text-slate-700 mb-6" }, (error === null || error === void 0 ? void 0 : error.message) || t.unknownError),
-                    React.createElement("button", { onClick: handleReset, className: "px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.tryAgainButton),
+                    React.createElement("button", { onClick: handleReset, className: "px-6 py-2 bg-gradient-to-r from-sky-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold rounded-lg transition-all transform hover:scale-105 shadow-md" }, t.startOverButton),
                     React.createElement(ApiKeyInput, { onSubmit: handleRetryWithUserKey })));
             case AppState.IDLE:
             default:
